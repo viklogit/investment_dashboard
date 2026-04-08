@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investment Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1B2A4A; --navy-mid: #2D4A7A; --gold: #F4B942; --gold-light: #FDF3DC;
+    --cream: #FAFAF7; --white: #FFFFFF; --slate: #4A5568; --muted: #8A95A3;
+    --border: #E2E8F0; --green: #22C55E; --red: #EF4444; --green-bg: #F0FDF4; --red-bg: #FEF2F2;
+    --shadow: 0 1px 3px rgba(27,42,74,0.08), 0 4px 16px rgba(27,42,74,0.06);
+    --shadow-lg: 0 8px 32px rgba(27,42,74,0.12);
+    --radius: 14px; --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--navy); min-height: 100vh; }
+  .topbar { background: var(--navy); padding: 0 32px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo { width: 32px; height: 32px; background: var(--gold); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .topbar-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--white); }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
+  .btn { padding: 8px 18px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .btn-gold { background: var(--gold); color: var(--navy); }
+  .btn-outline { background: transparent; color: var(--white); border: 1px solid rgba(255,255,255,0.3); }
+  .btn-navy { background: var(--navy); color: var(--white); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid #FCA5A5; }
+  .main { max-width: 1400px; margin: 0 auto; padding: 28px 24px; }
+  .nav-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--white); padding: 4px; border-radius: var(--radius); box-shadow: var(--shadow); width: fit-content; }
+  .tab { padding: 9px 22px; border-radius: 10px; border: none; background: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .tab.active { background: var(--navy); color: var(--white); box-shadow: 0 2px 8px rgba(27,42,74,0.3); }
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--white); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); border-left: 4px solid var(--navy); }
+  .stat-card.gold { border-left-color: var(--gold); }
+  .stat-card.green { border-left-color: var(--green); }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .stat-value { font-family: 'DM Serif Display', serif; font-size: 26px; color: var(--navy); line-height: 1; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden;}
+  .card-header { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-family: 'DM Serif Display', serif; font-size: 16px; color: var(--navy); }
+  .card-body { padding: 20px 22px; }
+  .card-body.table-wrap { padding: 20px 0; }
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .chart-wrap { position: relative; height: 320px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  th { background: var(--navy); color: var(--white); padding: 10px 14px; text-align: right; font-weight: 600; font-size: 12px; white-space: nowrap; position: sticky; top: 0; z-index: 10; border-bottom: 1.5px solid rgba(0,0,0,0.1); }
+  th:first-child { text-align: left; position: sticky; left: 0; z-index: 20; min-width: 202px; padding-left: 22px; border-right: 1px solid rgba(255,255,255,0.2); }
+  td { padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td:first-child { text-align: left; font-weight: 600; color: var(--navy); background: var(--white); position: sticky; left: 0; z-index: 15; padding-left: 22px; border-right: 1px solid var(--border); box-shadow: 2px 0 5px rgba(0,0,0,0.03); }
+  td:last-child, th:last-child { padding-right: 22px; }
+  tr:nth-child(even) td { background: var(--cream); }
+  tr:nth-child(even) td:first-child { background: var(--cream); }
+  tr.total-row td { background: var(--gold-light) !important; font-weight: 700; color: var(--navy); border-top: 2px solid var(--gold); }
+  .cell-editable { cursor: text !important; }
+  .cell-editable:hover { background: var(--gold-light) !important; outline: 2px solid var(--gold); }
+  input.cell-input { width: 90px; border: 2px solid var(--gold); border-radius: 4px; padding: 2px 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; text-align: right; background: var(--gold-light); outline: none; }
+  .positive { color: var(--green); font-weight: 600; }
+  .negative { color: var(--red); font-weight: 600; }
+  .zero { color: var(--muted); }
+  .alloc-row { display: flex; flex-direction: column; gap: 10px; }
+  .alloc-item { display: flex; align-items: center; gap: 12px; }
+  .alloc-name { font-size: 12px; font-weight: 500; width: 180px; color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+  .alloc-bar-wrap { flex: 1; height: 10px; background: var(--border); border-radius: 99px; }
+  .alloc-bar { height: 100%; border-radius: 99px; }
+  .alloc-pct { font-size: 12px; font-weight: 600; color: var(--navy); width: 42px; text-align: right; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--white); border-radius: var(--radius); padding: 28px; width: 400px; }
+  .modal h3 { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 18px; color: var(--navy); }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; }
+  .form-input, .form-select { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  #toast { position: fixed; bottom: 28px; right: 28px; background: var(--navy); color: var(--white); padding: 12px 20px; border-radius: var(--radius-sm); transform: translateY(20px); opacity: 0; transition: all 0.3s; z-index: 300; }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: #166534; } #toast.error { background: #991B1B; }  
+  .section { display: none; } .section.active { display: block; }
+  .manage-icon { cursor: pointer; margin-left: 6px; opacity: 0.4; transition: opacity 0.2s; font-size: 14px; }
+  .manage-icon:hover { opacity: 1; }
+  .manage-icon.delete:hover { color: var(--red); }
+  .manage-icon.edit:hover { color: var(--gold); }
+  th .manage-icon { color: var(--gold-light); }
+  .live-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-bg); color: var(--green); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(34,197,94,0.3); margin-left: 6px; vertical-align: middle; text-transform: uppercase; letter-spacing: 0.5px; }
+  .live-dot { width: 5px; height: 5px; background: var(--green); border-radius: 50%; display: inline-block; animation: blink 1.5s infinite; }
+  @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+</style>
+
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="topbar-logo">✨</div>
+    <span class="topbar-title">Portfolio Dashboard</span>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-navy btn-sm" onclick="fetchPrices()">🤖 Auto-Fetch Prices</button>
+    <button class="btn btn-outline btn-sm" onclick="openModal('month-modal')">＋ Add Month</button>
+    <button class="btn btn-outline btn-sm" onclick="openModal('asset-modal')">＋ Add Asset</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="nav-tabs">
+    <button class="tab active" onclick="switchTab('overview')">Overview</button>
+    <button class="tab" onclick="switchTab('contributions')">Contributions</button>
+    <button class="tab" onclick="switchTab('monthly_units')">Monthly Units</button>
+    <button class="tab" onclick="switchTab('buy_prices')">Buy Prices</button>
+    <button class="tab" onclick="switchTab('valuations')">Valuations (Market Value)</button>
+    <button class="tab" onclick="switchTab('prices')">Asset Prices</button>
+    <button class="tab" onclick="switchTab('pnl')">Monthly PnL</button>
+    <button class="tab" onclick="switchTab('assets')">Manage Assets</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section active" id="section-overview">
+    <div class="stats-row" id="stats-row">Loading...</div>
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Cumulative Invested vs Market Value</span></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="growthChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Asset Allocation</span></div>
+        <div class="card-body">
+          <div class="chart-wrap" style="height:200px"><canvas id="allocChart"></canvas></div>
+          <div class="alloc-row" id="alloc-bars" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Monthly Contributions per Asset</span></div>
+      <div class="card-body"><div class="chart-wrap" style="height: 300px;"><canvas id="monthlyBarChart"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Cumulative Stacked Investment (€)</span></div>
+      <div class="card-body"><div class="chart-wrap" style="height: 380px;"><canvas id="cumulativeStackedChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- CONTRIBUTIONS -->
+  <div class="section" id="section-contributions">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Cash Contributions (€)</span></div>
+      <div class="card-body table-wrap" id="contributions-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- MONTHLY UNITS -->
+  <div class="section" id="section-monthly_units">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Monthly Units Purchased</span></div>
+      <div class="card-body table-wrap" id="monthly_units-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- BUY PRICES -->
+  <div class="section" id="section-buy_prices">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Acquisition Price per Unit</span></div>
+      <div class="card-body table-wrap" id="buy_prices-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- VALUATIONS -->
+  <div class="section" id="section-valuations">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Market Valuations</span>
+        <span style="font-size:12px;color:var(--muted)">✏️ Manual · 🤖 Auto-Fetched</span>
+      </div>
+      <div class="card-body table-wrap" id="valuations-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- PRICES -->
+  <div class="section" id="section-prices">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Asset Unit Prices</span></div>
+      <div class="card-body table-wrap" id="prices-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- PNL -->
+  <div class="section" id="section-pnl">
+    <div class="card">
+      <div class="card-header"><span class="card-title">True Monthly PnL</span></div>
+      <div class="card-body table-wrap" id="pnl-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- ASSETS -->
+  <div class="section" id="section-assets">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Asset Management</span>
+        <span style="font-size:12px;color:var(--muted)">Manage tickers, types, and price sources for all investments.</span>
+      </div>
+      <div class="card-body table-wrap" id="assets-table-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-backdrop" id="month-modal">
+  <div class="modal">
+    <h3>Add New Month</h3>
+    <div class="form-group">
+      <label class="form-label">Month Label (e.g. Apr 2024)</label>
+      <input class="form-input" id="new-month-input" placeholder="Apr 2024" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">End Date (YYYY-MM-DD)</label>
+      <input class="form-input" id="new-month-date" placeholder="2024-04-30" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-navy" onclick="closeModal('month-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="addMonth()">Add Month</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="asset-modal">
+  <div class="modal">
+    <h3>Add New Asset</h3>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="asset-name" placeholder="Tesla" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Asset Type</label>
+      <select class="form-select" id="asset-type">
+        <option value="ETF">ETF</option>
+        <option value="STOCK">Stock</option>
+        <option value="FUND">Mutual Fund</option>
+        <option value="MANUAL">Manual / Cash</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ticker symbol (optional)</label>
+      <input class="form-input" id="asset-ticker" placeholder="TSLA" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">ISIN (for Mutual Funds)</label>
+      <input class="form-input" id="asset-isin" placeholder="IE00BYX5NX33" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Price Source tracking</label>
+      <select class="form-select" id="asset-source">
+        <option value="auto">Auto-Fetch (yfinance)</option>
+        <option value="manual">Manual Entry</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Base Currency</label>
+      <select class="form-select" id="asset-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-navy" onclick="closeModal('asset-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="addAsset()">Add Asset</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="edit-asset-modal">
+  <div class="modal">
+    <h3>Edit Asset</h3>
+    <input type="hidden" id="edit-asset-id" />
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="edit-asset-name" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Asset Type</label>
+      <select class="form-select" id="edit-asset-type">
+        <option value="ETF">ETF</option>
+        <option value="STOCK">Stock</option>
+        <option value="FUND">Mutual Fund</option>
+        <option value="MANUAL">Manual / Cash</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ticker symbol</label>
+      <input class="form-input" id="edit-asset-ticker" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Price Source tracking</label>
+      <select class="form-select" id="edit-asset-source">
+        <option value="auto">Auto-Fetch (yfinance)</option>
+        <option value="manual">Manual Entry</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Base Currency</label>
+      <select class="form-select" id="edit-asset-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-navy" onclick="closeModal('edit-asset-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="submitEditAsset()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let STATE = null;
+let charts = {};
+const COLORS = ['#1B2A4A','#F4B942','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899','#84CC16'];
+
+async function boot() {
+  try {
+    const r = await fetch('/api/portfolio');
+    STATE = await r.json();
+    renderAll();
+  } catch(e) { showToast('Server offline', 'error'); }
+}
+
+function fmt(n) { return n == null ? '—' : new Intl.NumberFormat('de-DE', { style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2 }).format(n); }
+function numClass(n) { return n > 0 ? 'positive' : n < 0 ? 'negative' : 'zero'; }
+function numSign(n) { return n > 0 ? '+' : ''; }
+
+function switchTab(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function renderAll() {
+  if (!STATE) return;
+  renderStats();
+  renderGrowthChart();
+  renderAllocChart();
+  renderMonthlyBarChart();
+  renderCumulativeStackedChart();
+  renderContributions();
+  renderMonthlyUnits();
+  renderBuyPrices();
+  renderValuations();
+  renderPrices();
+  renderPnL();
+  renderAssetsTable();
+}
+
+function renderCumulativeStackedChart() {
+  if (charts.cumulativeStacked) charts.cumulativeStacked.destroy();
+  const ctx = document.getElementById('cumulativeStackedChart').getContext('2d');
+  const labels = STATE.months.map(m => m.label);
+  
+  const datasets = STATE.assets.map((a, i) => {
+    let running = 0;
+    const data = STATE.contributions[a.name].map(v => {
+      running += v;
+      return running;
+    });
+    return {
+      label: a.name,
+      data: data,
+      backgroundColor: COLORS[i % COLORS.length] + 'CC',
+      borderColor: COLORS[i % COLORS.length],
+      borderWidth: 1,
+      fill: true,
+      stack: 'Stack 0'
+    };
+  });
+
+  charts.cumulativeStacked = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, title: { display: true, text: 'Total Invested (€)' } }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            footer: (items) => {
+              let total = items.reduce((a, b) => a + b.parsed.y, 0);
+              return 'Total: ' + fmt(total);
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderMonthlyBarChart() {
+  if (charts.monthlyBar) charts.monthlyBar.destroy();
+  const ctx = document.getElementById('monthlyBarChart').getContext('2d');
+  const labels = STATE.months.map(m => m.label);
+  
+  const datasets = STATE.assets.map((a, i) => ({
+    label: a.name,
+    data: STATE.contributions[a.name],
+    backgroundColor: COLORS[i % COLORS.length] + 'CC',
+    borderColor: COLORS[i % COLORS.length],
+    borderWidth: 1,
+    stack: 'Stack 0'
+  }));
+
+  charts.monthlyBar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true }
+      }
+    }
+  });
+}
+
+function renderStats() {
+  const { total_invested, current_value, total_pnl, is_live } = STATE.stats;
+  const liveLabel = is_live ? '<span class="live-badge"><span class="live-dot"></span>Live</span>' : '';
+  
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total Invested</div>
+      <div class="stat-value">${fmt(total_invested)}</div>
+    </div>
+    <div class="stat-card gold">
+      <div class="stat-label">Current Value ${liveLabel}</div>
+      <div class="stat-value">${fmt(current_value)}</div>
+    </div>
+    <div class="stat-card ${total_pnl >= 0 ? 'green' : ''}">
+      <div class="stat-label">Total PnL</div>
+      <div class="stat-value ${total_pnl > 0 ? 'green' : total_pnl < 0 ? 'red' : ''}">${numSign(total_pnl)}${fmt(total_pnl)}</div>
+    </div>
+  `;
+}
+
+
+function renderGrowthChart() {
+  if (charts.growth) charts.growth.destroy();
+  const ctx = document.getElementById('growthChart').getContext('2d');
+  const labels = STATE.months.map(m => m.label);
+  charts.growth = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Cumulative Invested', data: STATE.portfolio.cumulative, borderColor: '#1B2A4A', borderWidth: 2, fill: false, tension: 0.2 },
+        { label: 'Market Value', data: STATE.portfolio.valuations, borderColor: '#F4B942', backgroundColor: '#FDF3DC88', borderWidth: 3, fill: true, tension: 0.2 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
+function renderAllocChart() {
+  if (charts.alloc) charts.alloc.destroy();
+  const latest_vals = STATE.assets.map(a => {
+    let arr = STATE.valuations[a.name];
+    return arr[arr.length-1] || 0;
+  });
+  const total = STATE.stats.current_value || 1;
+  const ctx = document.getElementById('allocChart').getContext('2d');
+  charts.alloc = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: STATE.assets.map(a => a.name),
+      datasets: [{ data: latest_vals, backgroundColor: COLORS }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: false } }
+  });
+  
+  document.getElementById('alloc-bars').innerHTML = STATE.assets.map((a, i) => {
+    let pct = ((latest_vals[i] / total) * 100).toFixed(2);
+    return `<div class="alloc-item">
+      <div class="alloc-name" title="${a.name}">${a.name}</div>
+      <div class="alloc-bar-wrap"><div class="alloc-bar" style="width:${pct}%;background:${COLORS[i%COLORS.length]}"></div></div>
+      <div class="alloc-pct">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function buildTable(titles, dataDict, footerRow, typeStr) {
+  let html = `<table><thead><tr><th>Asset</th>`;
+  STATE.months.forEach(m => {
+    html += `<th>
+      ${m.label}
+      <span class="manage-icon edit" onclick="editMonth(${m.id}, '${m.label}')" title="Edit Month Label">✎</span>
+      <span class="manage-icon delete" onclick="deleteMonth(${m.id}, '${m.label}')" title="Delete Month">🗑️</span>
+    </th>`;
+  });
+  if(titles.includes("TOTAL")) html += `<th>TOTAL</th>`;
+  html += `</tr></thead><tbody>`;
+  
+  STATE.assets.forEach(a => {
+    html += `<tr>
+      <td>
+        ${a.name}
+        <span class="manage-icon edit" onclick="editAsset(${a.id}, '${a.name}')" title="Edit Asset Name">✎</span>
+        <span class="manage-icon delete" onclick="deleteAsset(${a.id}, '${a.name}')" title="Delete Asset">🗑️</span>
+      </td>`;
+    STATE.months.forEach((m, j) => {
+      let val = dataDict[a.name][j];
+      if (typeStr === 'pnl') {
+        html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val)}</td>`;
+      } else if (typeStr === 'price') {
+        html += `<td>${(val===null || val===undefined || val===0) ? '—' : fmt(val)}</td>`;
+      } else if (typeStr === 'valuation') {
+        // if valuations, check icon
+        let icon = "";
+        let tooltip = "Click to edit";
+        if (typeStr === 'valuation') {
+            try {
+                let p_src = STATE.price_sources[a.name][j] || {};
+                icon = p_src.is_manual ? ' ✏️' : ' 🤖';
+                let u = STATE.units_held[a.name][j] || 0;
+                let p = STATE.prices[a.name][j];
+                if (p && !isNaN(p)) tooltip += `\n${Number(u).toFixed(3)} units @ ${Number(p).toFixed(2)}€`;
+            } catch (err) {}
+        }
+        html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="${tooltip}">
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span><span style="font-size:10px">${icon}</span></td>`;
+      } else if (typeStr === 'monthly_units') {
+        html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit units">
+          <span class="val ${val===0?'zero':''}">${val===0?'—':val.toFixed(4)}</span></td>`;
+      } else if (typeStr === 'buy_price') {
+        html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit buy price">
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span></td>`;
+      } else {
+        html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit contribution">
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span></td>`;
+      }
+    });
+    if(titles.includes("TOTAL")) {
+      let sum = dataDict[a.name].reduce((acc, v)=>acc+v, 0);
+      html += `<td><strong>${fmt(sum)}</strong></td>`;
+    }
+    html += `</tr>`;
+  });
+  
+  if (footerRow && footerRow.length > 0) {
+    html += `<tr class="total-row"><td>PORTFOLIO TOTAL</td>`;
+    footerRow.forEach(v => {
+      html += `<td>${fmt(v)}</td>`;
+    });
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  return html;
+}
+
+function renderContributions() {
+  document.getElementById('contributions-table-wrap').innerHTML = buildTable(['TOTAL'], STATE.contributions, STATE.portfolio.contributions, 'contribution');
+}
+
+function renderValuations() {
+  document.getElementById('valuations-table-wrap').innerHTML = buildTable([], STATE.valuations, STATE.portfolio.valuations, 'valuation');
+}
+
+function renderMonthlyUnits() {
+  document.getElementById('monthly_units-table-wrap').innerHTML = buildTable(['TOTAL'], STATE.monthly_units, [], 'monthly_units');
+}
+
+function renderBuyPrices() {
+  document.getElementById('buy_prices-table-wrap').innerHTML = buildTable([], STATE.buy_prices, [], 'buy_price');
+}
+
+function renderPrices() {
+  document.getElementById('prices-table-wrap').innerHTML = buildTable([], STATE.prices, [], 'price');
+}
+
+function renderPnL() {
+  document.getElementById('pnl-table-wrap').innerHTML = buildTable([], STATE.monthly_pnl, STATE.portfolio.monthly_pnl, 'pnl');
+}
+
+function renderAssetsTable() {
+  let html = `<table><thead><tr>
+    <th>Asset Name</th>
+    <th style="text-align:left">Ticker</th>
+    <th style="text-align:left">Type</th>
+    <th style="text-align:left">Currency</th>
+    <th style="text-align:left">Price Source</th>
+    <th style="text-align:center">Actions</th>
+  </tr></thead><tbody>`;
+  
+  STATE.assets.forEach(a => {
+    const sourceIcon = a.price_source === 'auto' ? '🤖 Auto' : '✏️ Manual';
+    html += `<tr>
+      <td><strong>${a.name}</strong></td>
+      <td style="text-align:left; font-family:var(--mono)">${a.ticker || '—'}</td>
+      <td style="text-align:left">${a.asset_type}</td>
+      <td style="text-align:left">${a.currency || 'EUR'}</td>
+      <td style="text-align:left">${sourceIcon}</td>
+      <td style="text-align:center">
+        <button class="btn btn-sm btn-outline btn-navy" style="display:inline-flex" onclick="editAsset(${a.id}, '${a.name}')">✎ Edit</button>
+        <button class="btn btn-sm btn-danger" style="display:inline-flex; border-color:transparent" onclick="deleteAsset(${a.id}, '${a.name}')">🗑️ Delete</button>
+      </td>
+    </tr>`;
+  });
+  
+  html += `</tbody></table>`;
+  document.getElementById('assets-table-wrap').innerHTML = html;
+}
+
+function editCell(td, assetId, monthId, typeStr) {
+  const assetObj = STATE.assets.find(a => a.id === assetId);
+  if (!assetObj) return;
+  const assetName = assetObj.name;
+  
+  let valArr;
+  if (typeStr === 'contribution') valArr = STATE.contributions[assetName];
+  else if (typeStr === 'valuation') valArr = STATE.valuations[assetName];
+  else if (typeStr === 'monthly_units') valArr = STATE.monthly_units[assetName];
+  else if (typeStr === 'buy_price') valArr = STATE.buy_prices[assetName];
+  
+  let monthIdx = STATE.months.findIndex(m => m.id === monthId);
+  let currentVal = valArr[monthIdx] || 0;
+  
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.type = 'number';
+  input.value = currentVal;
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  async function commit() {
+    let rawValue = input.value.toString().replace(',', '.');
+    const newVal = parseFloat(rawValue) || 0;
+    if (newVal !== currentVal) {
+      valArr[monthIdx] = newVal;
+      try {
+        const res = await fetch('/api/update_data', { 
+          method:'POST', 
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ asset_id: assetId, month_id: monthId, value: newVal, type: typeStr }) 
+        });
+        const d = await res.json();
+        if (d.ok) {
+          await boot();
+          showToast('Saved ✓', 'success');
+          return;
+        } else {
+          showToast('Error: ' + d.error, 'error');
+        }
+      } catch(e) { showToast('Connection error', 'error'); }
+    }
+    renderAll();
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if(e.key === 'Escape') { input.value = currentVal; input.blur(); } });
+}
+
+async function addMonth() {
+  const month = document.getElementById('new-month-input').value;
+  const date_end = document.getElementById('new-month-date').value;
+  const r = await fetch('/api/add_month', { method:'POST', body: JSON.stringify({month, date_end}) });
+  const d = await r.json();
+  if(!d.ok) return showToast(d.error, 'error');
+  closeModal('month-modal');
+  boot();
+}
+
+async function addAsset() {
+  const asset = document.getElementById('asset-name').value;
+  const asset_type = document.getElementById('asset-type').value;
+  const ticker = document.getElementById('asset-ticker').value;
+  const isin = document.getElementById('asset-isin').value;
+  const price_source = document.getElementById('asset-source').value;
+  const currency = document.getElementById('asset-currency').value;
+  const r = await fetch('/api/add_asset', { method:'POST', body: JSON.stringify({asset, asset_type, ticker, isin, price_source, currency}) });
+  const d = await r.json();
+  if(!d.ok) return showToast(d.error, 'error');
+  closeModal('asset-modal');
+  boot();
+}
+
+async function fetchPrices() {
+  showToast('Fetching prices... this may take a moment');
+  const r = await fetch('/api/fetch_prices', { method:'POST' });
+  const d = await r.json();
+  showToast(`Autofetch complete. Prices fetched.`, 'success');
+  boot();
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('click', e => { if (e.target.classList.contains('modal-backdrop')) closeModal(e.target.id); });
+
+let toastTimer;
+function showToast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+}
+
+function editAsset(id, oldName) {
+  const asset = STATE.assets.find(a => a.id === id);
+  if (!asset) return;
+  
+  document.getElementById('edit-asset-id').value = asset.id;
+  document.getElementById('edit-asset-name').value = asset.name;
+  document.getElementById('edit-asset-type').value = asset.asset_type || 'MANUAL';
+  document.getElementById('edit-asset-ticker').value = asset.ticker || '';
+  document.getElementById('edit-asset-source').value = asset.price_source || 'manual';
+  document.getElementById('edit-asset-currency').value = asset.currency || 'EUR';
+  
+  openModal('edit-asset-modal');
+}
+
+async function submitEditAsset() {
+  const id = document.getElementById('edit-asset-id').value;
+  const name = document.getElementById('edit-asset-name').value;
+  const asset_type = document.getElementById('edit-asset-type').value;
+  const ticker = document.getElementById('edit-asset-ticker').value;
+  const price_source = document.getElementById('edit-asset-source').value;
+  const currency = document.getElementById('edit-asset-currency').value;
+  
+  const r = await fetch('/api/edit_asset', { 
+    method:'POST', 
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id, name, asset_type, ticker, price_source, currency}) 
+  });
+  const d = await r.json();
+  if (d.ok) { 
+    showToast('Asset updated', 'success'); 
+    closeModal('edit-asset-modal');
+    boot(); 
+  }
+  else showToast(d.error, 'error');
+}
+
+async function deleteAsset(id, name) {
+  if (!window.confirm(`Are you sure you want to delete ${name}? This will remove ALL related data.`)) return;
+  const r = await fetch('/api/delete_asset', { method:'POST', body: JSON.stringify({id}) });
+  const d = await r.json();
+  if (d.ok) { showToast('Asset deleted', 'success'); boot(); }
+  else showToast(d.error, 'error');
+}
+
+async function editMonth(id, oldLabel) {
+  const newLabel = window.prompt("Enter new label for month:", oldLabel);
+  if (!newLabel || newLabel === oldLabel) return;
+  const r = await fetch('/api/edit_month', { method:'POST', body: JSON.stringify({id, label: newLabel}) });
+  const d = await r.json();
+  if (d.ok) { showToast('Month renamed', 'success'); boot(); }
+  else showToast(d.error, 'error');
+}
+
+async function deleteMonth(id, label) {
+  if (!window.confirm(`Are you sure you want to delete ${label}? This will remove ALL related data.`)) return;
+  const r = await fetch('/api/delete_month', { method:'POST', body: JSON.stringify({id}) });
+  const d = await r.json();
+  if (d.ok) { showToast('Month deleted', 'success'); boot(); }
+  else showToast(d.error, 'error');
+}
+
+boot();
+</script>
+</body>
+</html>
