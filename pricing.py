@@ -5,9 +5,16 @@ def get_price(tickers, start_date, ticker_configs=None):
     if not tickers:
         return pd.DataFrame()
     
-    # Always include exchange rates for conversion
-    fx_tickers = ["EURUSD=X", "EURGBP=X"]
-    all_tickers = tickers + fx_tickers
+    # Calculate required FX tickers based on configs
+    fx_tickers = set()
+    if ticker_configs:
+        for ticker, config in ticker_configs.items():
+            buy_cur = config.get("currency", "EUR")
+            target_cur = config.get("target_currency", "EUR")
+            if buy_cur != target_cur:
+                fx_tickers.add(f"{buy_cur}{target_cur}=X")
+                
+    all_tickers = tickers + list(fx_tickers)
     
     market_data = yf.download(
         all_tickers,
@@ -25,10 +32,6 @@ def get_price(tickers, start_date, ticker_configs=None):
         # Fallback for unexpected data structure
         return pd.DataFrame(index=[pd.to_datetime(start_date).strftime('%b %Y')], columns=tickers).fillna(0)
 
-    # Extract FX rates
-    eurusd = close_df.get("EURUSD=X")
-    eurgbp = close_df.get("EURGBP=X")
-
     # Final prices data
     converted_df = close_df.copy()
 
@@ -39,12 +42,15 @@ def get_price(tickers, start_date, ticker_configs=None):
                 continue
                 
             config = ticker_configs.get(ticker, {})
-            currency = config.get("currency", "EUR")
+            buy_cur = config.get("currency", "EUR")
+            target_cur = config.get("target_currency", "EUR")
             
-            if currency == "USD" and eurusd is not None:
-                converted_df[ticker] = close_df[ticker] / eurusd
-            elif currency == "GBP" and eurgbp is not None:
-                converted_df[ticker] = close_df[ticker] / eurgbp
+            if buy_cur != target_cur:
+                fx_ticker = f"{buy_cur}{target_cur}=X"
+                fx_rate = close_df.get(fx_ticker)
+                
+                if fx_rate is not None:
+                    converted_df[ticker] = close_df[ticker] * fx_rate
 
     # Format the index
     converted_df.index = pd.to_datetime(converted_df.index).strftime('%b %Y')
@@ -57,12 +63,19 @@ def get_price(tickers, start_date, ticker_configs=None):
     return final_data
 
 def get_live_prices(tickers, ticker_configs=None):
-    """Fetch the latest available price for the given tickers and convert to EUR."""
+    """Fetch the latest available price for the given tickers and convert to target_currency."""
     if not tickers:
         return {}
     
-    fx_tickers = ["EURUSD=X", "EURGBP=X"]
-    all_tickers = tickers + fx_tickers
+    fx_tickers = set()
+    if ticker_configs:
+        for ticker, config in ticker_configs.items():
+            buy_cur = config.get("currency", "EUR")
+            target_cur = config.get("target_currency", "EUR")
+            if buy_cur != target_cur:
+                fx_tickers.add(f"{buy_cur}{target_cur}=X")
+                
+    all_tickers = tickers + list(fx_tickers)
     
     # Download latest 1d data
     market_data = yf.download(
@@ -89,9 +102,6 @@ def get_live_prices(tickers, ticker_configs=None):
         # Get the very last non-NaN price for each column
         latest_prices = {col: close_df[col].dropna().iloc[-1] for col in close_df.columns if not close_df[col].dropna().empty}
 
-    eurusd = latest_prices.get("EURUSD=X")
-    eurgbp = latest_prices.get("EURGBP=X")
-    
     results = {}
     for ticker in tickers:
         price = latest_prices.get(ticker)
@@ -99,14 +109,15 @@ def get_live_prices(tickers, ticker_configs=None):
             continue
             
         config = ticker_configs.get(ticker, {}) if ticker_configs else {}
-        currency = config.get("currency", "EUR")
+        buy_cur = config.get("currency", "EUR")
+        target_cur = config.get("target_currency", "EUR")
         
-        # Convert to EUR
-        if currency == "USD" and eurusd:
-            price = price / eurusd
-        elif currency == "GBP" and eurgbp:
-            price = price / eurgbp
-            
+        if buy_cur != target_cur:
+            fx_ticker = f"{buy_cur}{target_cur}=X"
+            fx_rate = latest_prices.get(fx_ticker)
+            if fx_rate:
+                price = price * fx_rate
+                
         results[ticker] = float(price)
         
     return results

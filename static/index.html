@@ -257,11 +257,49 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Base Currency</label>
+      <label class="form-label">Buy Currency</label>
       <select class="form-select" id="asset-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
         <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Target Currency</label>
+      <select class="form-select" id="asset-target-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
       </select>
     </div>
     <div class="modal-actions">
@@ -300,11 +338,49 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Base Currency</label>
+      <label class="form-label">Buy Currency</label>
       <select class="form-select" id="edit-asset-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
         <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Target Currency</label>
+      <select class="form-select" id="edit-asset-target-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
       </select>
     </div>
     <div class="modal-actions">
@@ -329,7 +405,9 @@ async function boot() {
   } catch(e) { showToast('Server offline', 'error'); }
 }
 
-function fmt(n) { return n == null ? '—' : new Intl.NumberFormat('de-DE', { style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2 }).format(n); }
+function fmt(n, currencyCode='EUR') { 
+  return n == null ? '—' : new Intl.NumberFormat('de-DE', { style:'currency', currency: currencyCode, minimumFractionDigits:2, maximumFractionDigits:2 }).format(n); 
+}
 function numClass(n) { return n > 0 ? 'positive' : n < 0 ? 'negative' : 'zero'; }
 function numSign(n) { return n > 0 ? '+' : ''; }
 
@@ -435,15 +513,15 @@ function renderStats() {
   document.getElementById('stats-row').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Total Invested</div>
-      <div class="stat-value">${fmt(total_invested)}</div>
+      <div class="stat-value">${fmt(total_invested, "EUR")}</div>
     </div>
     <div class="stat-card gold">
       <div class="stat-label">Current Value ${liveLabel}</div>
-      <div class="stat-value">${fmt(current_value)}</div>
+      <div class="stat-value">${fmt(current_value, "EUR")}</div>
     </div>
     <div class="stat-card ${total_pnl >= 0 ? 'green' : ''}">
       <div class="stat-label">Total PnL</div>
-      <div class="stat-value ${total_pnl > 0 ? 'green' : total_pnl < 0 ? 'red' : ''}">${numSign(total_pnl)}${fmt(total_pnl)}</div>
+      <div class="stat-value ${total_pnl > 0 ? 'green' : total_pnl < 0 ? 'red' : ''}">${numSign(total_pnl)}${fmt(total_pnl, "EUR")}</div>
     </div>
   `;
 }
@@ -514,10 +592,11 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
       </td>`;
     STATE.months.forEach((m, j) => {
       let val = dataDict[a.name][j];
+      let t_cur = a.target_currency || 'EUR';
       if (typeStr === 'pnl') {
-        html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val)}</td>`;
+        html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'price') {
-        html += `<td>${(val===null || val===undefined || val===0) ? '—' : fmt(val)}</td>`;
+        html += `<td>${(val===null || val===undefined || val===0) ? '—' : fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'valuation') {
         // if valuations, check icon
         let icon = "";
@@ -528,20 +607,20 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
                 icon = p_src.is_manual ? ' ✏️' : ' 🤖';
                 let u = STATE.units_held[a.name][j] || 0;
                 let p = STATE.prices[a.name][j];
-                if (p && !isNaN(p)) tooltip += `\n${Number(u).toFixed(3)} units @ ${Number(p).toFixed(2)}€`;
+                if (p && !isNaN(p)) tooltip += `\n${Number(u).toFixed(3)} units @ ${fmt(p, t_cur)}`;
             } catch (err) {}
         }
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="${tooltip}">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span><span style="font-size:10px">${icon}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span><span style="font-size:10px">${icon}</span></td>`;
       } else if (typeStr === 'monthly_units') {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit units">
           <span class="val ${val===0?'zero':''}">${val===0?'—':val.toFixed(4)}</span></td>`;
       } else if (typeStr === 'buy_price') {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit buy price">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span></td>`;
       } else {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit contribution">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span></td>`;
       }
     });
     if(titles.includes("TOTAL")) {
@@ -554,7 +633,7 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
   if (footerRow && footerRow.length > 0) {
     html += `<tr class="total-row"><td>PORTFOLIO TOTAL</td>`;
     footerRow.forEach(v => {
-      html += `<td>${fmt(v)}</td>`;
+      html += `<td>${fmt(v, "EUR")}</td>`;
     });
     html += `</tr>`;
   }
@@ -602,7 +681,7 @@ function renderAssetsTable() {
       <td><strong>${a.name}</strong></td>
       <td style="text-align:left; font-family:var(--mono)">${a.ticker || '—'}</td>
       <td style="text-align:left">${a.asset_type}</td>
-      <td style="text-align:left">${a.currency || 'EUR'}</td>
+      <td style="text-align:left">${a.currency || 'EUR'} ➔ ${a.target_currency || 'EUR'}</td>
       <td style="text-align:left">${sourceIcon}</td>
       <td style="text-align:center">
         <button class="btn btn-sm btn-outline btn-navy" style="display:inline-flex" onclick="editAsset(${a.id}, '${a.name}')">✎ Edit</button>
@@ -682,7 +761,8 @@ async function addAsset() {
   const isin = document.getElementById('asset-isin').value;
   const price_source = document.getElementById('asset-source').value;
   const currency = document.getElementById('asset-currency').value;
-  const r = await fetch('/api/add_asset', { method:'POST', body: JSON.stringify({asset, asset_type, ticker, isin, price_source, currency}) });
+  const target_currency = document.getElementById('asset-target-currency').value;
+  const r = await fetch('/api/add_asset', { method:'POST', body: JSON.stringify({asset, asset_type, ticker, isin, price_source, currency, target_currency}) });
   const d = await r.json();
   if(!d.ok) return showToast(d.error, 'error');
   closeModal('asset-modal');
@@ -719,6 +799,7 @@ function editAsset(id, oldName) {
   document.getElementById('edit-asset-ticker').value = asset.ticker || '';
   document.getElementById('edit-asset-source').value = asset.price_source || 'manual';
   document.getElementById('edit-asset-currency').value = asset.currency || 'EUR';
+  document.getElementById('edit-asset-target-currency').value = asset.target_currency || 'EUR';
   
   openModal('edit-asset-modal');
 }
@@ -730,11 +811,12 @@ async function submitEditAsset() {
   const ticker = document.getElementById('edit-asset-ticker').value;
   const price_source = document.getElementById('edit-asset-source').value;
   const currency = document.getElementById('edit-asset-currency').value;
+  const target_currency = document.getElementById('edit-asset-target-currency').value;
   
   const r = await fetch('/api/edit_asset', { 
     method:'POST', 
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({id, name, asset_type, ticker, price_source, currency}) 
+    body: JSON.stringify({id, name, asset_type, ticker, price_source, currency, target_currency}) 
   });
   const d = await r.json();
   if (d.ok) { 

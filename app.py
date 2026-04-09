@@ -81,7 +81,7 @@ def api_portfolio():
         
     # LIVE VALUATION CALCULATION
     auto_tickers = [a['ticker'] for a in assets if a['price_source'] == 'auto' and a['ticker']]
-    ticker_configs = {a['ticker']: {'currency': a.get('currency', 'EUR')} for a in assets if a['price_source'] == 'auto' and a['ticker']}
+    ticker_configs = {a['ticker']: {'currency': a.get('currency', 'EUR'), 'target_currency': a.get('target_currency', 'EUR')} for a in assets if a['price_source'] == 'auto' and a['ticker']}
     live_prices = get_live_prices(auto_tickers, ticker_configs)
     
     live_port_value = 0.0
@@ -181,12 +181,13 @@ def api_add_asset():
     isin = body.get("isin", None)
     price_source = body.get("price_source", "manual")
     currency = body.get("currency", "EUR")
+    target_currency = body.get("target_currency", "EUR")
     
     conn = get_db()
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO assets (name, asset_type, ticker, isin, price_source, currency) VALUES (?, ?, ?, ?, ?, ?)", 
-                  (name, asset_type, ticker, isin, price_source, currency))
+        c.execute("INSERT INTO assets (name, asset_type, ticker, isin, price_source, currency, target_currency) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                  (name, asset_type, ticker, isin, price_source, currency, target_currency))
         asset_id = c.lastrowid
         
         c.execute("SELECT id FROM months")
@@ -244,12 +245,13 @@ def api_edit_asset():
         asset_type = body.get("asset_type", current["asset_type"])
         price_source = body.get("price_source", current["price_source"])
         currency = body.get("currency", current["currency"])
+        target_currency = body.get("target_currency", current.get("target_currency", "EUR"))
         
         c.execute("""
             UPDATE assets 
-            SET name=?, ticker=?, asset_type=?, price_source=?, currency=? 
+            SET name=?, ticker=?, asset_type=?, price_source=?, currency=?, target_currency=?
             WHERE id=?
-        """, (name, ticker, asset_type, price_source, currency, asset_id))
+        """, (name, ticker, asset_type, price_source, currency, target_currency, asset_id))
         conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
@@ -424,7 +426,8 @@ def api_fetch_prices():
     for _, row in auto_assets.iterrows():
         if row['ticker'] and isinstance(row['ticker'], str):
             ticker_configs[row['ticker']] = {
-                "currency": row.get('currency', 'EUR')
+                "currency": row.get('currency', 'EUR'),
+                "target_currency": row.get('target_currency', 'EUR')
             }
     
     tickers = list(ticker_configs.keys())
