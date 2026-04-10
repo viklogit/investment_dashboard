@@ -24,6 +24,7 @@ def init_db():
             ticker TEXT,
             isin TEXT,
             currency TEXT DEFAULT 'EUR',
+            buy_currency TEXT DEFAULT 'EUR',
             target_currency TEXT DEFAULT 'EUR',
             price_source TEXT DEFAULT 'manual'
         )

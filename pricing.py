@@ -3,16 +3,19 @@ import pandas as pd
 
 def get_price(tickers, start_date, ticker_configs=None):
     if not tickers:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
     
     # Calculate required FX tickers based on configs
     fx_tickers = set()
     if ticker_configs:
         for ticker, config in ticker_configs.items():
-            buy_cur = config.get("currency", "EUR")
+            ticker_cur = config.get("currency", "EUR")
+            buy_cur = config.get("buy_currency", "EUR")
             target_cur = config.get("target_currency", "EUR")
-            if buy_cur != target_cur:
-                fx_tickers.add(f"{buy_cur}{target_cur}=X")
+            if ticker_cur != buy_cur:
+                fx_tickers.add(f"{ticker_cur}{buy_cur}=X")
+            if ticker_cur != target_cur:
+                fx_tickers.add(f"{ticker_cur}{target_cur}=X")
                 
     all_tickers = tickers + list(fx_tickers)
     
@@ -30,10 +33,12 @@ def get_price(tickers, start_date, ticker_configs=None):
             close_df = close_df.to_frame()
     else:
         # Fallback for unexpected data structure
-        return pd.DataFrame(index=[pd.to_datetime(start_date).strftime('%b %Y')], columns=tickers).fillna(0)
+        empty_df = pd.DataFrame(index=[pd.to_datetime(start_date).strftime('%b %Y')], columns=tickers).fillna(0)
+        return empty_df, empty_df.copy()
 
     # Final prices data
-    converted_df = close_df.copy()
+    buy_df = close_df.copy()
+    target_df = close_df.copy()
 
     # Perform conversions
     if ticker_configs:
@@ -42,38 +47,47 @@ def get_price(tickers, start_date, ticker_configs=None):
                 continue
                 
             config = ticker_configs.get(ticker, {})
-            buy_cur = config.get("currency", "EUR")
+            ticker_cur = config.get("currency", "EUR")
+            buy_cur = config.get("buy_currency", "EUR")
             target_cur = config.get("target_currency", "EUR")
             
-            if buy_cur != target_cur:
-                fx_ticker = f"{buy_cur}{target_cur}=X"
+            if ticker_cur != buy_cur:
+                fx_ticker = f"{ticker_cur}{buy_cur}=X"
                 fx_rate = close_df.get(fx_ticker)
-                
                 if fx_rate is not None:
-                    converted_df[ticker] = close_df[ticker] * fx_rate
+                    buy_df[ticker] = close_df[ticker] * fx_rate
+                    
+            if ticker_cur != target_cur:
+                fx_ticker = f"{ticker_cur}{target_cur}=X"
+                fx_rate = close_df.get(fx_ticker)
+                if fx_rate is not None:
+                    target_df[ticker] = close_df[ticker] * fx_rate
 
     # Format the index
-    converted_df.index = pd.to_datetime(converted_df.index).strftime('%b %Y')
-    converted_df.columns.name = None
-    converted_df.index.name = None
+    for df in (buy_df, target_df):
+        df.index = pd.to_datetime(df.index).strftime('%b %Y')
+        df.columns.name = None
+        df.index.name = None
     
     # Filter out FX tickers and return transposed
-    available_tickers = [t for t in tickers if t in converted_df.columns]
-    final_data = converted_df[available_tickers].T
-    return final_data
+    available_tickers = [t for t in tickers if t in buy_df.columns]
+    return buy_df[available_tickers].T, target_df[available_tickers].T
 
 def get_live_prices(tickers, ticker_configs=None):
-    """Fetch the latest available price for the given tickers and convert to target_currency."""
+    """Fetch the latest available price for the given tickers and convert to target_currency and buy_currency."""
     if not tickers:
         return {}
     
     fx_tickers = set()
     if ticker_configs:
         for ticker, config in ticker_configs.items():
-            buy_cur = config.get("currency", "EUR")
+            ticker_cur = config.get("currency", "EUR")
+            buy_cur = config.get("buy_currency", "EUR")
             target_cur = config.get("target_currency", "EUR")
-            if buy_cur != target_cur:
-                fx_tickers.add(f"{buy_cur}{target_cur}=X")
+            if ticker_cur != buy_cur:
+                fx_tickers.add(f"{ticker_cur}{buy_cur}=X")
+            if ticker_cur != target_cur:
+                fx_tickers.add(f"{ticker_cur}{target_cur}=X")
                 
     all_tickers = tickers + list(fx_tickers)
     
@@ -104,20 +118,60 @@ def get_live_prices(tickers, ticker_configs=None):
 
     results = {}
     for ticker in tickers:
-        price = latest_prices.get(ticker)
-        if price is None:
+        base_price = latest_prices.get(ticker)
+        if base_price is None:
             continue
             
         config = ticker_configs.get(ticker, {}) if ticker_configs else {}
-        buy_cur = config.get("currency", "EUR")
+        ticker_cur = config.get("currency", "EUR")
+        buy_cur = config.get("buy_currency", "EUR")
         target_cur = config.get("target_currency", "EUR")
         
-        if buy_cur != target_cur:
-            fx_ticker = f"{buy_cur}{target_cur}=X"
+        buy_price = base_price
+        target_price = base_price
+        
+        if ticker_cur != buy_cur:
+            fx_ticker = f"{ticker_cur}{buy_cur}=X"
             fx_rate = latest_prices.get(fx_ticker)
             if fx_rate:
-                price = price * fx_rate
+                buy_price = base_price * fx_rate
                 
-        results[ticker] = float(price)
+        if ticker_cur != target_cur:
+            fx_ticker = f"{ticker_cur}{target_cur}=X"
+            fx_rate = latest_prices.get(fx_ticker)
+            if fx_rate:
+                target_price = base_price * fx_rate
+                
+        results[ticker] = {
+            'buy_price': float(buy_price),
+            'target_price': float(target_price)
+        }
         
     return results
+
+
+def get_fx_rate(from_currency, to_currency):
+    if not from_currency or not to_currency or from_currency == to_currency:
+        return 1.0
+
+    fx_ticker = f"{from_currency}{to_currency}=X"
+    data = yf.download(fx_ticker, period="5d", interval="1d", auto_adjust=False, progress=False)
+
+    if data.empty or 'Close' not in data:
+        return 1.0
+
+    close_data = data['Close']
+    if hasattr(close_data, "dropna"):
+        close_data = close_data.dropna()
+
+    if len(close_data) == 0:
+        return 1.0
+
+    # single ticker case
+    if hasattr(close_data, "iloc"):
+        last_val = close_data.iloc[-1]
+        if hasattr(last_val, "item"):
+            last_val = last_val.item()
+        return float(last_val)
+
+    return 1.0

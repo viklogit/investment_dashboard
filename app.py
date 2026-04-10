@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request, send_from_directory
 import os
 import sqlite3
 from db import get_db, init_db, import_from_excel_if_empty
-from pricing import get_price, get_live_prices
+from pricing import get_price, get_live_prices, get_fx_rate
 import pandas as pd
 
 app = Flask(__name__, static_folder="static")
@@ -81,7 +81,7 @@ def api_portfolio():
         
     # LIVE VALUATION CALCULATION
     auto_tickers = [a['ticker'] for a in assets if a['price_source'] == 'auto' and a['ticker']]
-    ticker_configs = {a['ticker']: {'currency': a.get('currency', 'EUR'), 'target_currency': a.get('target_currency', 'EUR')} for a in assets if a['price_source'] == 'auto' and a['ticker']}
+    ticker_configs = {a['ticker']: {'currency': a.get('currency', 'EUR'), 'buy_currency': a.get('buy_currency', 'EUR'), 'target_currency': a.get('target_currency', 'EUR')} for a in assets if a['price_source'] == 'auto' and a['ticker']}
     live_prices = get_live_prices(auto_tickers, ticker_configs)
     
     live_port_value = 0.0
@@ -89,7 +89,7 @@ def api_portfolio():
         # Get latest units
         latest_units = units_held[a['name']][-1] if units_held[a['name']] else 0.0
         if a['price_source'] == 'auto' and a['ticker'] in live_prices:
-            live_port_value += latest_units * live_prices[a['ticker']]
+            live_port_value += latest_units * live_prices[a['ticker']]['target_price']
         else:
             # Fallback to last recorded month's valuation
             live_port_value += valuations[a['name']][-1] if valuations[a['name']] else 0.0
@@ -181,13 +181,14 @@ def api_add_asset():
     isin = body.get("isin", None)
     price_source = body.get("price_source", "manual")
     currency = body.get("currency", "EUR")
+    buy_currency = body.get("buy_currency", "EUR")
     target_currency = body.get("target_currency", "EUR")
     
     conn = get_db()
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO assets (name, asset_type, ticker, isin, price_source, currency, target_currency) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                  (name, asset_type, ticker, isin, price_source, currency, target_currency))
+        c.execute("INSERT INTO assets (name, asset_type, ticker, isin, price_source, currency, buy_currency, target_currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (name, asset_type, ticker, isin, price_source, currency, buy_currency, target_currency))
         asset_id = c.lastrowid
         
         c.execute("SELECT id FROM months")
@@ -245,13 +246,14 @@ def api_edit_asset():
         asset_type = body.get("asset_type", current["asset_type"])
         price_source = body.get("price_source", current["price_source"])
         currency = body.get("currency", current["currency"])
+        buy_currency = body.get("buy_currency", current.get("buy_currency", "EUR"))
         target_currency = body.get("target_currency", current.get("target_currency", "EUR"))
         
         c.execute("""
             UPDATE assets 
-            SET name=?, ticker=?, asset_type=?, price_source=?, currency=?, target_currency=?
+            SET name=?, ticker=?, asset_type=?, price_source=?, currency=?, buy_currency=?, target_currency=?
             WHERE id=?
-        """, (name, ticker, asset_type, price_source, currency, target_currency, asset_id))
+        """, (name, ticker, asset_type, price_source, currency, buy_currency, target_currency, asset_id))
         conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
@@ -308,7 +310,7 @@ def api_update_data():
     c = conn.cursor()
     
     try:
-        c.execute("SELECT id, name, price_source FROM assets WHERE id=?", (asset_id,))
+        c.execute("SELECT id, name, price_source, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
         asset = c.fetchone()
         c.execute("SELECT id FROM months WHERE id=?", (month_id,))
         month = c.fetchone()
@@ -379,17 +381,23 @@ def api_update_data():
             val = c.fetchone()
             if val:
                 prc = val['price'] if val['price'] else 0.0
-                # If it's a manual valuation update, the price might have changed but MV is the source.
-                # If it's any other update, MV should be recalculated from units_held * price.
-                if update_type == 'valuation' and mid == month_id:
-                    # Already updated MV and price above
-                    pass
-                else:
-                    new_mv = u_held * prc
-                    c.execute("UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?", (u_held, new_mv, asset['id'], mid))
-            else:
-                c.execute("INSERT INTO valuations (asset_id, month_id, units_held, market_value) VALUES (?, ?, ?, 0.0)", (asset['id'], mid, u_held))
 
+                # price is stored in buy_currency, but market_value must be stored in target_currency
+                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+
+                if update_type == 'valuation' and mid == month_id:
+                    # If the user manually entered a valuation, keep that valuation but still update units_held
+                    c.execute(
+                        "UPDATE valuations SET units_held=? WHERE asset_id=? AND month_id=?",
+                        (u_held, asset['id'], mid)
+                    )
+                else:
+                    raw_mv_buy_currency = u_held * prc
+                    new_mv = raw_mv_buy_currency * fx_rate
+                    c.execute(
+                        "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
+                        (u_held, new_mv, asset['id'], mid)
+                    )
         conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
@@ -427,6 +435,7 @@ def api_fetch_prices():
         if row['ticker'] and isinstance(row['ticker'], str):
             ticker_configs[row['ticker']] = {
                 "currency": row.get('currency', 'EUR'),
+                "buy_currency": row.get('buy_currency', 'EUR'),
                 "target_currency": row.get('target_currency', 'EUR')
             }
     
@@ -435,31 +444,41 @@ def api_fetch_prices():
         return jsonify({"ok": True, "fetched": 0, "msg": "No auto-tracked tickers found."})
 
     # Pass configs to get_price
-    prices_df = get_price(tickers, start_date, ticker_configs=ticker_configs)
-
+    buy_prices_df, target_prices_df = get_price(tickers, start_date, ticker_configs=ticker_configs)
+    
     updates = 0
-
+    
     for a in assets:
         units_held = 0.0
-        prev_price = 0.0
-
+        prev_target_price = 0.0
+        prev_buy_price = 0.0
+        
         for m in months:
             # Convertir la fecha del mes al formato de columna del df: "Jan 2024"
             month_col = pd.to_datetime(m["date_end"]).strftime("%b %Y")
-
-            fetched_price = None
-
-            if a["ticker"] in prices_df.index and month_col in prices_df.columns:
-                fetched_price = prices_df.loc[a["ticker"], month_col]
-
+            
+            fetched_target_price = None
+            fetched_buy_price = None
+            
+            if a["ticker"] in target_prices_df.index and month_col in target_prices_df.columns:
+                fetched_target_price = target_prices_df.loc[a["ticker"], month_col]
+            if a["ticker"] in buy_prices_df.index and month_col in buy_prices_df.columns:
+                fetched_buy_price = buy_prices_df.loc[a["ticker"], month_col]
+                
             # Si es NaN o None, usar el precio anterior
-            if pd.notna(fetched_price) and fetched_price > 0:
-                price = float(fetched_price)
-                prev_price = price
+            if pd.notna(fetched_target_price) and fetched_target_price > 0:
+                target_price = float(fetched_target_price)
+                prev_target_price = target_price
             else:
-                price = prev_price
-
-            if price and price > 0:
+                target_price = prev_target_price
+                
+            if pd.notna(fetched_buy_price) and fetched_buy_price > 0:
+                buy_price = float(fetched_buy_price)
+                prev_buy_price = buy_price
+            else:
+                buy_price = prev_buy_price
+                
+            if target_price and target_price > 0 and buy_price and buy_price > 0:
                 # Contribution
                 c.execute(
                     "SELECT amount, units, buy_price FROM contributions WHERE asset_id=? AND month_id=?",
@@ -471,23 +490,23 @@ def api_fetch_prices():
                 
                 # If units not provided, calculate them from amount and price
                 if units_bought == 0 and amount > 0:
-                    units_bought = amount / price
+                    units_bought = amount / buy_price
                     c.execute(
                         "UPDATE contributions SET units=?, buy_price=? WHERE asset_id=? AND month_id=?",
-                        (units_bought, price, a["id"], m["id"])
+                        (units_bought, buy_price, a["id"], m["id"])
                     )
-
+                
                 units_held += units_bought
-
+                
                 # Market value
-                market_value = units_held * price
-
+                market_value = units_held * target_price
+                
                 c.execute("""
                     UPDATE valuations
                     SET price=?, units_held=?, market_value=?, source='auto', is_manual=0
                     WHERE asset_id=? AND month_id=?
-                """, (price, units_held, market_value, a["id"], m["id"]))
-
+                """, (target_price, units_held, market_value, a["id"], m["id"]))
+                
                 updates += 1
 
     conn.commit()

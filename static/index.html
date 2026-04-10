@@ -257,7 +257,7 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Buy Currency</label>
+      <label class="form-label">Asset Currency (Ticker)</label>
       <select class="form-select" id="asset-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
@@ -280,7 +280,30 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Target Currency</label>
+      <label class="form-label">Buying Currency (Bank)</label>
+      <select class="form-select" id="asset-buy-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Target Currency (Dashboard)</label>
       <select class="form-select" id="asset-target-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
@@ -338,7 +361,7 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Buy Currency</label>
+      <label class="form-label">Asset Currency (Ticker)</label>
       <select class="form-select" id="edit-asset-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
@@ -361,7 +384,30 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Target Currency</label>
+      <label class="form-label">Buying Currency (Bank)</label>
+      <select class="form-select" id="edit-asset-buy-currency">
+        <option value="EUR">Euro (€)</option>
+        <option value="USD">US Dollar ($)</option>
+        <option value="GBP">British Pound (£)</option>
+        <option value="NOK">Norwegian Krone (kr)</option>
+        <option value="SEK">Swedish Krona (kr)</option>
+        <option value="DKK">Danish Krone (kr)</option>
+        <option value="CHF">Swiss Franc (Fr)</option>
+        <option value="JPY">Japanese Yen (¥)</option>
+        <option value="CAD">Canadian Dollar ($)</option>
+        <option value="AUD">Australian Dollar ($)</option>
+        <option value="NZD">New Zealand Dollar ($)</option>
+        <option value="CNY">Chinese Yuan (¥)</option>
+        <option value="HKD">Hong Kong Dollar ($)</option>
+        <option value="SGD">Singapore Dollar ($)</option>
+        <option value="INR">Indian Rupee (₹)</option>
+        <option value="BRL">Brazilian Real (R$)</option>
+        <option value="ZAR">South African Rand (R)</option>
+        <option value="MXN">Mexican Peso ($)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Target Currency (Dashboard)</label>
       <select class="form-select" id="edit-asset-target-currency">
         <option value="EUR">Euro (€)</option>
         <option value="USD">US Dollar ($)</option>
@@ -593,6 +639,7 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
     STATE.months.forEach((m, j) => {
       let val = dataDict[a.name][j];
       let t_cur = a.target_currency || 'EUR';
+      let b_cur = a.buy_currency || 'EUR';
       if (typeStr === 'pnl') {
         html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'price') {
@@ -617,10 +664,10 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
           <span class="val ${val===0?'zero':''}">${val===0?'—':val.toFixed(4)}</span></td>`;
       } else if (typeStr === 'buy_price') {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit buy price">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span></td>`;
       } else {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit contribution">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span></td>`;
       }
     });
     if(titles.includes("TOTAL")) {
@@ -681,7 +728,7 @@ function renderAssetsTable() {
       <td><strong>${a.name}</strong></td>
       <td style="text-align:left; font-family:var(--mono)">${a.ticker || '—'}</td>
       <td style="text-align:left">${a.asset_type}</td>
-      <td style="text-align:left">${a.currency || 'EUR'} ➔ ${a.target_currency || 'EUR'}</td>
+      <td style="text-align:left">${a.currency || 'EUR'} (Buy: ${a.buy_currency || 'EUR'}) ➔ ${a.target_currency || 'EUR'}</td>
       <td style="text-align:left">${sourceIcon}</td>
       <td style="text-align:center">
         <button class="btn btn-sm btn-outline btn-navy" style="display:inline-flex" onclick="editAsset(${a.id}, '${a.name}')">✎ Edit</button>
@@ -761,8 +808,9 @@ async function addAsset() {
   const isin = document.getElementById('asset-isin').value;
   const price_source = document.getElementById('asset-source').value;
   const currency = document.getElementById('asset-currency').value;
+  const buy_currency = document.getElementById('asset-buy-currency').value;
   const target_currency = document.getElementById('asset-target-currency').value;
-  const r = await fetch('/api/add_asset', { method:'POST', body: JSON.stringify({asset, asset_type, ticker, isin, price_source, currency, target_currency}) });
+  const r = await fetch('/api/add_asset', { method:'POST', body: JSON.stringify({asset, asset_type, ticker, isin, price_source, currency, buy_currency, target_currency}) });
   const d = await r.json();
   if(!d.ok) return showToast(d.error, 'error');
   closeModal('asset-modal');
@@ -799,6 +847,7 @@ function editAsset(id, oldName) {
   document.getElementById('edit-asset-ticker').value = asset.ticker || '';
   document.getElementById('edit-asset-source').value = asset.price_source || 'manual';
   document.getElementById('edit-asset-currency').value = asset.currency || 'EUR';
+  document.getElementById('edit-asset-buy-currency').value = asset.buy_currency || 'EUR';
   document.getElementById('edit-asset-target-currency').value = asset.target_currency || 'EUR';
   
   openModal('edit-asset-modal');
@@ -811,12 +860,13 @@ async function submitEditAsset() {
   const ticker = document.getElementById('edit-asset-ticker').value;
   const price_source = document.getElementById('edit-asset-source').value;
   const currency = document.getElementById('edit-asset-currency').value;
+  const buy_currency = document.getElementById('edit-asset-buy-currency').value;
   const target_currency = document.getElementById('edit-asset-target-currency').value;
   
   const r = await fetch('/api/edit_asset', { 
     method:'POST', 
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({id, name, asset_type, ticker, price_source, currency, target_currency}) 
+    body: JSON.stringify({id, name, asset_type, ticker, price_source, currency, buy_currency, target_currency}) 
   });
   const d = await r.json();
   if (d.ok) { 
