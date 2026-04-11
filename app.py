@@ -406,6 +406,65 @@ def api_update_data():
     finally:
         conn.close()
 
+@app.route("/api/update_investment_full", methods=["POST"])
+def api_update_investment_full():
+    body = request.get_json(force=True)
+    asset_id = body.get("asset_id")
+    month_id = body.get("month_id")
+    amount = float(body.get("amount", 0))
+    units = float(body.get("units", 0))
+    buy_price = float(body.get("buy_price", 0))
+    
+    if not asset_id or not month_id:
+        return jsonify({"ok": False, "error": "Missing asset ID or month ID"}), 400
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    try:
+        c.execute("SELECT id, name, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
+        asset = c.fetchone()
+        if not asset:
+            return jsonify({"ok": False, "error": "Asset not found"}), 404
+            
+        # Update contributions
+        c.execute("""
+            UPDATE contributions 
+            SET amount=?, units=?, buy_price=? 
+            WHERE asset_id=? AND month_id=?
+        """, (amount, units, buy_price, asset_id, month_id))
+        
+        # RECALCULATE ENTIRE ASSET HISTORY
+        c.execute("SELECT m.id, m.label FROM months m ORDER BY m.date_end ASC")
+        all_months = c.fetchall()
+        u_held = 0.0
+        for m in all_months:
+            mid = m['id']
+            # Get latest contribution data
+            c.execute("SELECT units FROM contributions WHERE asset_id=? AND month_id=?", (asset_id, mid))
+            cont = c.fetchone()
+            u_held += cont['units'] if cont else 0.0
+            
+            # Update valuation
+            c.execute("SELECT price FROM valuations WHERE asset_id=? AND month_id=?", (asset_id, mid))
+            val = c.fetchone()
+            if val:
+                prc = val['price'] if val['price'] else 0.0
+                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                new_mv = (u_held * prc) * fx_rate
+                c.execute(
+                    "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
+                    (u_held, new_mv, asset_id, mid)
+                )
+        
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Error in update_investment_full: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route("/api/fetch_prices", methods=["POST"])
 def api_fetch_prices():
     conn = get_db()

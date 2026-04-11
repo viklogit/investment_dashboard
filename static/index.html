@@ -88,6 +88,18 @@
   .live-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-bg); color: var(--green); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(34,197,94,0.3); margin-left: 6px; vertical-align: middle; text-transform: uppercase; letter-spacing: 0.5px; }
   .live-dot { width: 5px; height: 5px; background: var(--green); border-radius: 50%; display: inline-block; animation: blink 1.5s infinite; }
   @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+  .modal.wide { width: 600px; }
+  .calc-table { width: 100%; margin: 15px 0; border-collapse: collapse; }
+  .calc-table th { background: var(--navy-mid); padding: 8px; font-size: 11px; }
+  .calc-table td { padding: 6px; border-bottom: 1px solid var(--border); }
+  .calc-input { width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; text-align: right; }
+  .calc-row-total { font-weight: 600; font-size: 13px; text-align: right; display: block; }
+  .calc-footer { background: var(--cream); padding: 12px; border-radius: var(--radius-sm); margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .calc-footer-item { display: flex; flex-direction: column; }
+  .calc-footer-label { font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+  .calc-footer-val { font-size: 15px; font-weight: 700; color: var(--navy); }
+  .btn-calc-trigger { padding: 1px 4px; font-size: 8px; font-weight: bold; margin-left: 4px; vertical-align: middle; opacity: 0.3; border: 1px solid var(--border); background: var(--white); color: var(--navy); transition: all 0.2s; }
+  .btn-calc-trigger:hover { opacity: 1; background: var(--gold); color: var(--navy); border-color: var(--gold); }
 </style>
 
 </head>
@@ -436,6 +448,49 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="calc-modal">
+  <div class="modal wide">
+    <h3 id="calc-title">Investment Calculator</h3>
+    <div id="calc-subtitle" style="font-size:12px; color:var(--muted); margin-top:-14px; margin-bottom:15px;"></div>
+    
+    <table class="calc-table">
+      <thead>
+        <tr>
+          <th style="text-align:left; color:white">Units</th>
+          <th style="text-align:left; color:white">Price per Unit</th>
+          <th style="text-align:right; color:white">Subtotal</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody id="calc-tbody">
+        <!-- Rows added dynamically -->
+      </tbody>
+    </table>
+    
+    <button class="btn btn-navy btn-sm" onclick="addCalcRow()" style="margin-bottom:15px">＋ Add Purchase</button>
+    
+    <div class="calc-footer">
+      <div class="calc-footer-item">
+        <span class="calc-footer-label">Total Contribution</span>
+        <span class="calc-footer-val" id="calc-total-amount">€0,00</span>
+      </div>
+      <div class="calc-footer-item">
+        <span class="calc-footer-label">Total Units</span>
+        <span class="calc-footer-val" id="calc-total-units">0.0000</span>
+      </div>
+      <div class="calc-footer-item" style="grid-column: span 2; margin-top:8px; border-top:1px solid #ddd; pt-8">
+        <span class="calc-footer-label">Weighted Average Buy Price</span>
+        <span class="calc-footer-val" id="calc-avg-price">€0,00</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-navy" onclick="closeModal('calc-modal')">Cancel</button>
+      <button class="btn btn-gold" id="btn-apply-calc">Apply to Month</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -640,34 +695,36 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
       let val = dataDict[a.name][j];
       let t_cur = a.target_currency || 'EUR';
       let b_cur = a.buy_currency || 'EUR';
+      
+      let calcBtn = (typeStr==='contribution'||typeStr==='monthly_units'||typeStr==='buy_price') 
+        ? `<button class="btn-calc-trigger" onclick="event.stopPropagation(); openCalculator(${a.id}, ${m.id})" title="Calculate Weighted Average">+</button>` 
+        : "";
+
       if (typeStr === 'pnl') {
         html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'price') {
         html += `<td>${(val===null || val===undefined || val===0) ? '—' : fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'valuation') {
-        // if valuations, check icon
         let icon = "";
         let tooltip = "Click to edit";
-        if (typeStr === 'valuation') {
-            try {
-                let p_src = STATE.price_sources[a.name][j] || {};
-                icon = p_src.is_manual ? ' ✏️' : ' 🤖';
-                let u = STATE.units_held[a.name][j] || 0;
-                let p = STATE.prices[a.name][j];
-                if (p && !isNaN(p)) tooltip += `\n${Number(u).toFixed(3)} units @ ${fmt(p, t_cur)}`;
-            } catch (err) {}
-        }
+        try {
+            let p_src = STATE.price_sources[a.name][j] || {};
+            icon = p_src.is_manual ? ' ✏️' : ' 🤖';
+            let u = STATE.units_held[a.name][j] || 0;
+            let p = STATE.prices[a.name][j];
+            if (p && !isNaN(p)) tooltip += `\n${Number(u).toFixed(3)} units @ ${fmt(p, t_cur)}`;
+        } catch (err) {}
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="${tooltip}">
           <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, t_cur)}</span><span style="font-size:10px">${icon}</span></td>`;
       } else if (typeStr === 'monthly_units') {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit units">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':val.toFixed(4)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':val.toFixed(4)}</span>${calcBtn}</td>`;
       } else if (typeStr === 'buy_price') {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit buy price">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span>${calcBtn}</td>`;
       } else {
         html += `<td class="cell-editable" onclick="editCell(this, ${a.id}, ${m.id}, '${typeStr}')" title="Click to edit contribution">
-          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span></td>`;
+          <span class="val ${val===0?'zero':''}">${val===0?'—':fmt(val, b_cur)}</span>${calcBtn}</td>`;
       }
     });
     if(titles.includes("TOTAL")) {
@@ -900,6 +957,111 @@ async function deleteMonth(id, label) {
   const d = await r.json();
   if (d.ok) { showToast('Month deleted', 'success'); boot(); }
   else showToast(d.error, 'error');
+}
+
+// CALCULATOR LOGIC
+let calcAssetId = null;
+let calcMonthId = null;
+
+function openCalculator(assetId, monthId) {
+  calcAssetId = assetId;
+  calcMonthId = monthId;
+  const asset = STATE.assets.find(a => a.id === assetId);
+  const month = STATE.months.find(m => m.id === monthId);
+  
+  document.getElementById('calc-subtitle').textContent = `${asset.name} - ${month.label}`;
+  document.getElementById('calc-tbody').innerHTML = '';
+  
+  // Init with one row (using current values if they exist)
+  let monthIdx = STATE.months.findIndex(m => m.id === monthId);
+  let curUnits = STATE.monthly_units[asset.name][monthIdx] || 0;
+  let curPrice = STATE.buy_prices[asset.name][monthIdx] || 0;
+  
+  if (curUnits > 0 || curPrice > 0) {
+    addCalcRow(curUnits, curPrice);
+  } else {
+    addCalcRow();
+  }
+  
+  recalcCalculator();
+  
+  const applyBtn = document.getElementById('btn-apply-calc');
+  applyBtn.onclick = applyCalculation;
+  
+  openModal('calc-modal');
+}
+
+function addCalcRow(units = '', price = '') {
+  const tbody = document.getElementById('calc-tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="number" class="calc-input units-input" value="${units}" oninput="recalcCalculator()" placeholder="0.00" step="any"></td>
+    <td><input type="number" class="calc-input price-input" value="${price}" oninput="recalcCalculator()" placeholder="0.00" step="any"></td>
+    <td class="calc-row-total">—</td>
+    <td><button class="btn-danger btn-sm" onclick="this.closest('tr').remove(); recalcCalculator()">×</button></td>
+  `;
+  tbody.appendChild(tr);
+  recalcCalculator();
+}
+
+function recalcCalculator() {
+  const rows = document.querySelectorAll('#calc-tbody tr');
+  let totalAmount = 0;
+  let totalUnits = 0;
+  
+  rows.forEach(row => {
+    const units = parseFloat(row.querySelector('.units-input').value) || 0;
+    const price = parseFloat(row.querySelector('.price-input').value) || 0;
+    const subtotal = units * price;
+    row.querySelector('.calc-row-total').textContent = fmt(subtotal);
+    totalAmount += subtotal;
+    totalUnits += units;
+  });
+  
+  const avgPrice = totalUnits > 0 ? (totalAmount / totalUnits) : 0;
+  
+  document.getElementById('calc-total-amount').textContent = fmt(totalAmount);
+  document.getElementById('calc-total-units').textContent = totalUnits.toFixed(4);
+  document.getElementById('calc-avg-price').textContent = fmt(avgPrice);
+}
+
+async function applyCalculation() {
+  const rows = document.querySelectorAll('#calc-tbody tr');
+  let totalAmount = 0;
+  let totalUnits = 0;
+  
+  rows.forEach(row => {
+    const units = parseFloat(row.querySelector('.units-input').value) || 0;
+    const price = parseFloat(row.querySelector('.price-input').value) || 0;
+    totalAmount += (units * price);
+    totalUnits += units;
+  });
+  
+  const avgPrice = totalUnits > 0 ? (totalAmount / totalUnits) : 0;
+  
+  try {
+    const r = await fetch('/api/update_investment_full', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        asset_id: calcAssetId,
+        month_id: calcMonthId,
+        amount: totalAmount,
+        units: totalUnits,
+        buy_price: avgPrice
+      })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast('Investment updated', 'success');
+      closeModal('calc-modal');
+      boot();
+    } else {
+      showToast(d.error, 'error');
+    }
+  } catch (e) {
+    showToast('Server error', 'error');
+  }
 }
 
 boot();
