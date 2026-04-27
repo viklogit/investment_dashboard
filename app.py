@@ -3,8 +3,9 @@ from flask import Flask, jsonify, request, send_from_directory
 import os
 import sqlite3
 from db import get_db, init_db, import_from_excel_if_empty
-from pricing import get_price, get_live_prices, get_fx_rate
+from pricing import get_price, get_live_prices, get_fx_rate, get_timeframe_prices, get_daily_history
 import pandas as pd
+from datetime import datetime, timedelta
 
 app = Flask(__name__, static_folder="static")
 
@@ -85,14 +86,37 @@ def api_portfolio():
     live_prices = get_live_prices(auto_tickers, ticker_configs)
     
     live_port_value = 0.0
+    asset_stats = []
+    
     for a in assets:
         # Get latest units
         latest_units = units_held[a['name']][-1] if units_held[a['name']] else 0.0
+        total_inv = cumulative_invested[a['name']][-1] if cumulative_invested[a['name']] else 0.0
+        
+        is_live_asset = False
         if a['price_source'] == 'auto' and a['ticker'] in live_prices:
-            live_port_value += latest_units * live_prices[a['ticker']]['target_price']
+            current_val = latest_units * live_prices[a['ticker']]['target_price']
+            is_live_asset = True
         else:
             # Fallback to last recorded month's valuation
-            live_port_value += valuations[a['name']][-1] if valuations[a['name']] else 0.0
+            current_val = valuations[a['name']][-1] if valuations[a['name']] else 0.0
+
+        live_port_value += current_val
+        
+        pnl = current_val - total_inv
+        pnl_pct = (pnl / total_inv * 100) if total_inv > 0 else 0.0
+        
+        asset_stats.append({
+            "id": a['id'],
+            "name": a['name'],
+            "ticker": a['ticker'],
+            "asset_type": a['asset_type'],
+            "total_invested": round(total_inv, 2),
+            "current_value": round(current_val, 2),
+            "total_pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_pct, 2),
+            "is_live": is_live_asset
+        })
 
     latest_port_value = portfolio_valuations[-1] if portfolio_valuations else 0.0
     latest_port_invested = portfolio_cumulative[-1] if portfolio_cumulative else 0.0
@@ -101,7 +125,6 @@ def api_portfolio():
     current_value = live_port_value if live_port_value > 0 else latest_port_value
     total_pnl = current_value - latest_port_invested
 
-    
     stats = {
         "total_invested": round(latest_port_invested, 2),
         "current_value": round(current_value, 2),
@@ -111,7 +134,111 @@ def api_portfolio():
         "num_months": len(months)
     }
 
+    # TIMEFRAME PERFORMANCE CALCULATION (1w, 1m, YTD, 1y)
+    tf_prices = get_timeframe_prices(auto_tickers, ticker_configs)
+    timeframe_stats = {}
     
+    for tf in ['1w', '1m', 'ytd', '1y']:
+        tf_value_then = 0.0
+        tf_invested_then = 0.0
+        
+        # Determine approximate snapshot date for this timeframe
+        now = datetime.now()
+        if tf == '1w': target_dt = now - timedelta(days=7)
+        elif tf == '1m': target_dt = now - timedelta(days=30)
+        elif tf == 'ytd': target_dt = datetime(now.year, 1, 1)
+        else: target_dt = now - timedelta(days=365)
+        
+        # Find the month index that was active then
+        # We'll use the month whose date_end is closest but <= target_dt
+        snapshot_midx = -1
+        for i, m in enumerate(months):
+            m_dt = datetime.strptime(m['date_end'], '%Y-%m-%d')
+            if m_dt <= target_dt:
+                snapshot_midx = i
+            else:
+                break
+        
+        for a in assets:
+            u_then = 0.0
+            inv_then = 0.0
+            
+            if snapshot_midx >= 0:
+                u_then = units_held[a['name']][snapshot_midx]
+                inv_then = cumulative_invested[a['name']][snapshot_midx]
+            
+            p_then = 0.0
+            if a['price_source'] == 'auto' and a['ticker'] in tf_prices:
+                p_then = tf_prices[a['ticker']].get(tf)
+            
+            if not p_then or p_then == 0:
+                # Fallback to DB price if auto fails or is manual
+                if snapshot_midx >= 0:
+                    p_then = prices[a['name']][snapshot_midx] or 0.0
+                else:
+                    p_then = 0.0
+                    
+            tf_value_then += u_then * p_then
+            tf_invested_then += inv_then
+            
+        current_invested = stats['total_invested']
+        net_contribs = current_invested - tf_invested_then
+        
+        tf_pnl = (stats['current_value'] - tf_value_then) - net_contribs
+        # Return is calculated on the starting value + any additions during the period
+        denominator = (tf_value_then + net_contribs)
+        tf_pct = (tf_pnl / denominator * 100) if denominator > 0 else 0.0
+        
+        timeframe_stats[tf] = {
+            "pnl": round(tf_pnl, 2),
+            "pct": round(tf_pct, 2)
+        }
+
+    # DAILY PERFORMANCE (Last 30 days)
+    daily_raw = get_daily_history(auto_tickers, days=30, ticker_configs=ticker_configs)
+    
+    # Generate a complete range of last 30 days to avoid gaps
+    now_dt = datetime.now()
+    sorted_dates = [(now_dt - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(30, -1, -1)]
+    
+    daily_performance = {
+        "dates": sorted_dates,
+        "assets": {a['name']: [] for a in assets}
+    }
+    
+    for d_str in sorted_dates:
+        for a in assets:
+            # Find the most recent monthly snapshot before this date
+            u_day = 0.0
+            inv_day = 0.0
+            m_pnl_snap = 0.0
+            
+            for i, m in enumerate(months):
+                if m['date_end'] <= d_str:
+                    u_day = units_held[a['name']][i]
+                    inv_day = cumulative_invested[a['name']][i]
+                    # vals[i] - cum_inv[i]
+                    m_pnl_snap = valuations[a['name']][i] - cumulative_invested[a['name']][i]
+                else:
+                    break
+            
+            d_pnl = m_pnl_snap
+            
+            # If auto-tracked, try to get more accurate daily PnL
+            if a['price_source'] == 'auto' and a['ticker'] in daily_raw:
+                p_day = daily_raw[a['ticker']].get(d_str)
+                if not p_day:
+                    # Try finding closest prior date in daily_raw for this ticker
+                    ticker_dates = sorted(daily_raw[a['ticker']].keys())
+                    prior_dates = [td for td in ticker_dates if td <= d_str]
+                    if prior_dates:
+                        p_day = daily_raw[a['ticker']][prior_dates[-1]]
+                
+                if p_day and u_day > 0:
+                    d_pnl = (u_day * p_day) - inv_day
+            
+            daily_performance["assets"][a['name']].append(round(d_pnl, 2))
+
     conn.close()
     return jsonify({
         "months": months, 
@@ -131,8 +258,12 @@ def api_portfolio():
             "valuations": portfolio_valuations,
             "monthly_pnl": portfolio_pnl
         },
-        "stats": stats
+        "stats": stats,
+        "asset_stats": asset_stats,
+        "timeframe_stats": timeframe_stats,
+        "daily_performance": daily_performance
     })
+
 
 @app.route("/api/add_month", methods=["POST"])
 def api_add_month():

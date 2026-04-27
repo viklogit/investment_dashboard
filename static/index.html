@@ -100,6 +100,34 @@
   .calc-footer-val { font-size: 15px; font-weight: 700; color: var(--navy); }
   .btn-calc-trigger { padding: 1px 4px; font-size: 8px; font-weight: bold; margin-left: 4px; vertical-align: middle; opacity: 0.3; border: 1px solid var(--border); background: var(--white); color: var(--navy); transition: all 0.2s; }
   .btn-calc-trigger:hover { opacity: 1; background: var(--gold); color: var(--navy); border-color: var(--gold); }
+  
+  /* PnL Evolution styles */
+  .pnl-card-content { display: flex; gap: 24px; min-height: 400px; }
+  .pnl-sidebar { width: 200px; border-right: 1px solid var(--border); padding-right: 20px; flex-shrink: 0; }
+  .pnl-charts-main { flex: 1; display: grid; grid-template-columns: 1fr; gap: 24px; }
+  .pnl-sidebar-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .asset-toggle-list { display: flex; flex-direction: column; gap: 6px; }
+  .asset-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer; transition: all 0.2s; font-size: 12px; font-weight: 500; }
+  .asset-toggle:hover { background: var(--cream); border-color: var(--navy-mid); }
+  .asset-toggle.active { background: var(--navy); color: var(--white); border-color: var(--navy); }
+  .asset-toggle-checkbox { width: 14px; height: 14px; accent-color: var(--gold); }
+  .pnl-btn-text { background: none; border: none; color: var(--gold); font-size: 10px; cursor: pointer; font-weight: 700; padding: 2px 0; }
+  .pnl-btn-text:hover { color: var(--navy); }
+  .chart-container-pnl { height: 280px; position: relative; }
+  
+  /* Timeframe stats styles */
+  .tf-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .tf-stat-card { background: var(--white); border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+  .tf-stat-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .tf-stat-pnl { font-weight: 700; font-size: 16px; color: var(--navy); }
+  .tf-stat-pct { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .tf-stat-pct.positive { color: var(--green); }
+  .tf-stat-pct.negative { color: var(--red); }
+  
+  .chart-filter-row { display: flex; gap: 8px; margin-bottom: 12px; justify-content: flex-end; }
+  .filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); cursor: pointer; font-size: 11px; font-weight: 600; color: var(--muted); transition: all 0.2s; }
+  .filter-btn:hover { background: var(--cream); border-color: var(--navy-mid); }
+  .filter-btn.active { background: var(--navy); color: var(--white); border-color: var(--navy); }
 </style>
 
 </head>
@@ -132,6 +160,54 @@
   <!-- OVERVIEW -->
   <div class="section active" id="section-overview">
     <div class="stats-row" id="stats-row">Loading...</div>
+    <div class="tf-stats-row" id="tf-stats-row"></div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Asset Performance Breakdown</span>
+        <span style="font-size:12px;color:var(--muted)">Individual profitability based on weighted average buy price.</span>
+      </div>
+      <div class="card-body table-wrap" id="asset-performance-table-wrap"></div>
+    </div>
+    
+    <div class="card" id="pnl-evolution-section">
+      <div class="card-header">
+        <span class="card-title">PnL Evolution (Cumulative & Monthly)</span>
+        <span style="font-size:12px;color:var(--muted)">Analyze profitability over time for selected assets.</span>
+      </div>
+      <div class="card-body pnl-card-content">
+        <div class="pnl-sidebar">
+          <div class="pnl-sidebar-title">
+            Select Assets
+            <div>
+              <button class="pnl-btn-text" onclick="toggleAllPnLAssets(true)">All</button>
+              <button class="pnl-btn-text" onclick="toggleAllPnLAssets(false)">None</button>
+            </div>
+          </div>
+          <div class="asset-toggle-list" id="pnl-asset-list">
+            <!-- Dynamic asset list -->
+          </div>
+        </div>
+        <div class="pnl-charts-main">
+          <div class="chart-filter-row">
+            <button class="filter-btn active" onclick="setChartTimeframe('all')">ALL</button>
+            <button class="filter-btn" onclick="setChartTimeframe('1y')">1Y</button>
+            <button class="filter-btn" onclick="setChartTimeframe('ytd')">YTD</button>
+            <button class="filter-btn" onclick="setChartTimeframe('6m')">6M</button>
+            <button class="filter-btn" onclick="setChartTimeframe('1m')">1M</button>
+            <button class="filter-btn" onclick="setChartTimeframe('1w')">1W</button>
+          </div>
+          <div>
+            <div class="pnl-sidebar-title">Cumulative Profit/Loss (€)</div>
+            <div class="chart-container-pnl"><canvas id="cumulativePnLChart"></canvas></div>
+          </div>
+          <div>
+            <div class="pnl-sidebar-title">Monthly Delta Profit/Loss (€)</div>
+            <div class="chart-container-pnl"><canvas id="monthlyPnLChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="charts-grid">
       <div class="card">
         <div class="card-header"><span class="card-title">Cumulative Invested vs Market Value</span></div>
@@ -496,6 +572,8 @@
 <script>
 let STATE = null;
 let charts = {};
+let selectedPnLAssetNames = [];
+let chartTimeframe = 'all'; // 'all', '1y', 'ytd', '6m'
 const COLORS = ['#1B2A4A','#F4B942','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899','#84CC16'];
 
 async function boot() {
@@ -521,7 +599,20 @@ function switchTab(name) {
 
 function renderAll() {
   if (!STATE) return;
+
+  // Ensure selection only contains existing assets
+  const currentAssetNames = STATE.assets.map(a => a.name);
+  selectedPnLAssetNames = selectedPnLAssetNames.filter(n => currentAssetNames.includes(n));
+
+  // Initialize PnL selection if empty
+  if (selectedPnLAssetNames.length === 0 && STATE.assets.length > 0) {
+    selectedPnLAssetNames = STATE.assets.map(a => a.name);
+  }
+
   renderStats();
+  renderTimeframeStats();
+  renderAssetStats();
+  renderPnLCharts();
   renderGrowthChart();
   renderAllocChart();
   renderMonthlyBarChart();
@@ -534,6 +625,282 @@ function renderAll() {
   renderPnL();
   renderAssetsTable();
 }
+
+function renderAssetStats() {
+  if (!STATE.asset_stats) return;
+  
+  let html = `<table><thead><tr>
+    <th style="text-align:left; padding-left:22px">Asset</th>
+    <th style="text-align:left">Ticker / Type</th>
+    <th style="text-align:right">Total Invested</th>
+    <th style="text-align:right">Current Value</th>
+    <th style="text-align:right">Total PnL</th>
+    <th style="text-align:right; padding-right:22px">Return (%)</th>
+  </tr></thead><tbody>`;
+  
+  STATE.asset_stats.forEach(as => {
+    const liveIcon = as.is_live ? '<span class="live-badge"><span class="live-dot"></span>Live</span>' : '';
+    html += `<tr>
+      <td style="text-align:left; padding-left:22px"><strong>${as.name}</strong></td>
+      <td style="text-align:left; color:var(--muted); font-size:11px">
+        ${as.ticker ? `<code>${as.ticker}</code>` : '—'} • ${as.asset_type}
+      </td>
+      <td style="text-align:right">${fmt(as.total_invested)}</td>
+      <td style="text-align:right">${fmt(as.current_value)} ${liveIcon}</td>
+      <td style="text-align:right" class="${numClass(as.total_pnl)}">
+        ${numSign(as.total_pnl)}${fmt(as.total_pnl)}
+      </td>
+      <td style="text-align:right; padding-right:22px" class="${numClass(as.pnl_percent)}">
+        ${numSign(as.pnl_percent)}${as.pnl_percent.toFixed(2)}%
+      </td>
+    </tr>`;
+  });
+  
+  html += `</tbody></table>`;
+  document.getElementById('asset-performance-table-wrap').innerHTML = html;
+}
+
+function renderPnLCharts() {
+  renderPnLAssetSelector();
+  const data = calculatePnLData();
+  renderCumulativePnLSeries(data);
+  renderMonthlyPnLSeries(data);
+}
+
+function renderPnLAssetSelector() {
+  const container = document.getElementById('pnl-asset-list');
+  container.innerHTML = STATE.assets.map(a => {
+    const active = selectedPnLAssetNames.includes(a.name) ? 'active' : '';
+    const checked = selectedPnLAssetNames.includes(a.name) ? 'checked' : '';
+    return `
+      <div class="asset-toggle ${active}" onclick="togglePnLAsset('${a.name}')">
+        <input type="checkbox" class="asset-toggle-checkbox" ${checked} onclick="event.stopPropagation(); togglePnLAsset('${a.name}')">
+        <span>${a.name}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function togglePnLAsset(name) {
+  const idx = selectedPnLAssetNames.indexOf(name);
+  if (idx > -1) selectedPnLAssetNames.splice(idx, 1);
+  else selectedPnLAssetNames.push(name);
+  renderPnLCharts();
+}
+
+function toggleAllPnLAssets(bool) {
+  if (bool) selectedPnLAssetNames = STATE.assets.map(a => a.name);
+  else selectedPnLAssetNames = [];
+  renderPnLCharts();
+}
+
+function setChartTimeframe(tf) {
+  chartTimeframe = tf;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase() === tf);
+  });
+  renderPnLCharts();
+}
+
+function calculatePnLData() {
+  // Use high-resolution daily data for 1w and 1m if available
+  if ((chartTimeframe === '1w' || chartTimeframe === '1m') && STATE.daily_performance && STATE.daily_performance.dates.length > 0) {
+    const dp = STATE.daily_performance;
+    let sliceSize = chartTimeframe === '1w' ? 8 : dp.dates.length;
+    
+    let labels = dp.dates.slice(-sliceSize).map(d => {
+        const dt = new Date(d);
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    
+    let cumulativeSeries = new Array(labels.length).fill(0);
+    let monthlySeries = new Array(labels.length).fill(0);
+    
+    selectedPnLAssetNames.forEach(name => {
+      const assetSeries = dp.assets[name] || [];
+      const sliced = assetSeries.slice(-sliceSize);
+      sliced.forEach((val, i) => {
+        cumulativeSeries[i] += val;
+        if (i > 0) {
+            monthlySeries[i] += (val - sliced[i-1]);
+        }
+      });
+    });
+    
+    // Ensure we have at least some data
+    if (labels.length > 0) return { labels, cumulativeSeries, monthlySeries };
+  }
+
+  let labels = [...STATE.months.map(m => m.label), "LIVE"];
+  let numMonths = STATE.months.length;
+  
+  let cumulativeSeries = new Array(numMonths + 1).fill(0);
+  let monthlySeries = new Array(numMonths + 1).fill(0);
+  
+  selectedPnLAssetNames.forEach(name => {
+    const vals = STATE.valuations[name] || [];
+    const cumInv = STATE.cumulative_invested[name] || [];
+    const mPnl = STATE.monthly_pnl[name] || [];
+    const stats = STATE.asset_stats.find(s => s.name === name);
+    
+    for (let i = 0; i < numMonths; i++) {
+      cumulativeSeries[i] += (vals[i] || 0) - (cumInv[i] || 0);
+      monthlySeries[i] += (mPnl[i] || 0);
+    }
+    
+    if (stats) {
+      cumulativeSeries[numMonths] += stats.total_pnl;
+      const lastMonthPnL = numMonths > 0 ? ((vals[numMonths-1] || 0) - (cumInv[numMonths-1] || 0)) : 0;
+      monthlySeries[numMonths] += (stats.total_pnl - lastMonthPnL);
+    }
+  });
+
+  // Filter based on chartTimeframe
+  if (chartTimeframe !== 'all') {
+    let sliceSize = 0;
+    if (chartTimeframe === '1y') sliceSize = 13; // 12 months + Live
+    else if (chartTimeframe === '6m') sliceSize = 7; // 6 months + Live
+    else if (chartTimeframe === '1m') sliceSize = 2; // Fallback
+    else if (chartTimeframe === '1w') sliceSize = 2; // Fallback
+    else if (chartTimeframe === 'ytd') {
+        const currentYear = new Date().getFullYear();
+        sliceSize = 1; // start with Live
+        for (let i = numMonths - 1; i >= 0; i--) {
+            if (labels[i].includes(currentYear.toString())) sliceSize++;
+            else break;
+        }
+    }
+    
+    if (sliceSize > 0 && sliceSize < labels.length) {
+        labels = labels.slice(-sliceSize);
+        cumulativeSeries = cumulativeSeries.slice(-sliceSize);
+        monthlySeries = monthlySeries.slice(-sliceSize);
+    }
+  }
+  
+  return { labels, cumulativeSeries, monthlySeries };
+}
+
+function renderTimeframeStats() {
+    const tf = STATE.timeframe_stats;
+    if (!tf) return;
+    
+    const container = document.getElementById('tf-stats-row');
+    const periods = [
+        { key: '1w', label: '1 Week' },
+        { key: '1m', label: '1 Month' },
+        { key: 'ytd', label: 'Year To Date' },
+        { key: '1y', label: '1 Year' }
+    ];
+    
+    container.innerHTML = periods.map(p => {
+        const data = tf[p.key];
+        if (!data) return '';
+        const pnlStr = (data.pnl >= 0 ? '+' : '') + fmt(data.pnl);
+        const pctStr = (data.pnl >= 0 ? '+' : '') + data.pct.toFixed(2) + '%';
+        const css = data.pnl >= 0 ? 'positive' : 'negative';
+        const arrow = data.pnl >= 0 ? '▲' : '▼';
+        
+        return `
+            <div class="tf-stat-card">
+                <div class="tf-stat-label">${p.label}</div>
+                <div class="tf-stat-pnl ${css}">${pnlStr}</div>
+                <div class="tf-stat-pct ${css}">
+                    <span>${arrow}</span>
+                    <span>${pctStr}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderCumulativePnLSeries(data) {
+  if (charts.cumulativePnL) charts.cumulativePnL.destroy();
+  const ctx = document.getElementById('cumulativePnLChart').getContext('2d');
+  
+  const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+  gradient.addColorStop(0, '#F4B94244');
+  gradient.addColorStop(1, '#F4B94200');
+
+  charts.cumulativePnL = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Cumulative PnL',
+        data: data.cumulativeSeries,
+        borderColor: '#F4B942',
+        backgroundColor: gradient,
+        borderWidth: 3,
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#F4B942',
+        pointRadius: (ctx) => ctx.dataIndex === data.labels.length - 1 ? 6 : 3,
+        pointHoverRadius: 8
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `Total PnL: ${fmt(ctx.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { callback: (v) => fmt(v) }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderMonthlyPnLSeries(data) {
+  if (charts.monthlyPnL) charts.monthlyPnL.destroy();
+  const ctx = document.getElementById('monthlyPnLChart').getContext('2d');
+  
+  charts.monthlyPnL = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Monthly PnL',
+        data: data.monthlySeries,
+        borderColor: '#10B981',
+        backgroundColor: '#10B98122',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true,
+        pointBackgroundColor: (ctx) => data.monthlySeries[ctx.dataIndex] >= 0 ? '#10B981' : '#EF4444',
+        pointRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `Monthly Delta: ${fmt(ctx.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { callback: (v) => fmt(v) }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
 
 function renderCumulativeStackedChart() {
   if (charts.cumulativeStacked) charts.cumulativeStacked.destroy();
