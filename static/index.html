@@ -632,9 +632,9 @@ function renderAssetStats() {
   let html = `<table><thead><tr>
     <th style="text-align:left; padding-left:22px">Asset</th>
     <th style="text-align:left">Ticker / Type</th>
-    <th style="text-align:right">Total Invested</th>
-    <th style="text-align:right">Current Value</th>
-    <th style="text-align:right">Total PnL</th>
+    <th style="text-align:right">Total Invested (€)</th>
+    <th style="text-align:right">Current Value (€)</th>
+    <th style="text-align:right">Total PnL (€)</th>
     <th style="text-align:right; padding-right:22px">Return (%)</th>
   </tr></thead><tbody>`;
   
@@ -1054,7 +1054,8 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
   STATE.assets.forEach(a => {
     html += `<tr>
       <td>
-        ${a.name}
+        <strong>${a.name}</strong>
+        ${(typeStr==='contribution'||typeStr==='buy_price') ? `<br><span style="font-size:10px;color:var(--muted)">(${a.buy_currency || 'EUR'})</span>` : ''}
         <span class="manage-icon edit" onclick="editAsset(${a.id}, '${a.name}')" title="Edit Asset Name">✎</span>
         <span class="manage-icon delete" onclick="deleteAsset(${a.id}, '${a.name}')" title="Delete Asset">🗑️</span>
       </td>`;

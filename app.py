@@ -32,37 +32,55 @@ def api_portfolio():
     
     month_ids = [m['id'] for m in months]
     
+    # PRE-FETCH FX RATES
+    fx_rates = {}
     for a in assets:
-        running_cash = 0.0
-        prev_value = 0.0
+        bc = a.get('buy_currency', 'EUR')
+        tc = a.get('target_currency', 'EUR')
+        if bc != tc and (bc, tc) not in fx_rates:
+            fx_rates[(bc, tc)] = get_fx_rate(bc, tc)
+
+    for a in assets:
+        bc = a.get('buy_currency', 'EUR')
+        tc = a.get('target_currency', 'EUR')
+        fx_rate = fx_rates.get((bc, tc), 1.0)
+        
+        running_cash_target = 0.0
+        prev_value_target = 0.0
+        
         for mid in month_ids:
             c.execute("SELECT amount, units, buy_price FROM contributions WHERE asset_id=? AND month_id=?", (a['id'], mid))
             contrib_row = c.fetchone()
-            cb = contrib_row['amount'] if contrib_row else 0.0
+            cb_raw = contrib_row['amount'] if contrib_row else 0.0
             cu = contrib_row['units'] if contrib_row else 0.0
-            cbp = contrib_row['buy_price'] if contrib_row else 0.0
+            cbp_raw = contrib_row['buy_price'] if contrib_row else 0.0
+            
+            cb_target = cb_raw * fx_rate
             
             c.execute("SELECT market_value, price, units_held, source, is_manual FROM valuations WHERE asset_id=? AND month_id=?", (a['id'], mid))
             val_row = c.fetchone()
-            mv = val_row['market_value'] if val_row else 0.0
+            mv_target = val_row['market_value'] if val_row else 0.0
             
-            running_cash += cb
-            pnl_this_month = mv - prev_value - cb
+            running_cash_target += cb_target
+            pnl_this_month_target = mv_target - prev_value_target - cb_target
             
-            contributions[a['name']].append(round(cb, 2))
-            valuations[a['name']].append(round(mv, 2))
+            # Keep raw buy_currency amounts for editing in the frontend tables
+            contributions[a['name']].append(round(cb_raw, 2))
+            buy_prices[a['name']].append(round(cbp_raw, 4))
+            
+            # Use target_currency for everything else
+            valuations[a['name']].append(round(mv_target, 2))
             prices[a['name']].append(val_row['price'] if val_row else None)
             units_held[a['name']].append(val_row['units_held'] if val_row else 0)
             price_sources[a['name']].append({
                 "source": val_row['source'] if val_row else "manual", 
                 "is_manual": val_row['is_manual'] if val_row else 1
             })
-            monthly_pnl[a['name']].append(round(pnl_this_month, 2))
-            cumulative_invested[a['name']].append(round(running_cash, 2))
+            monthly_pnl[a['name']].append(round(pnl_this_month_target, 2))
+            cumulative_invested[a['name']].append(round(running_cash_target, 2))
             monthly_units[a['name']].append(round(cu, 4))
-            buy_prices[a['name']].append(round(cbp, 4))
             
-            prev_value = mv
+            prev_value_target = mv_target
 
     portfolio_contributions = []
     portfolio_cumulative = []
@@ -70,7 +88,13 @@ def api_portfolio():
     portfolio_pnl = []
     
     for i in range(len(months)):
-        tot_c = sum(contributions[a['name']][i] for a in assets)
+        tot_c = 0.0
+        for a in assets:
+            bc = a.get('buy_currency', 'EUR')
+            tc = a.get('target_currency', 'EUR')
+            fx_rate = fx_rates.get((bc, tc), 1.0)
+            tot_c += contributions[a['name']][i] * fx_rate
+            
         tot_cv = sum(cumulative_invested[a['name']][i] for a in assets)
         tot_v = sum(valuations[a['name']][i] for a in assets)
         tot_pnl = sum(monthly_pnl[a['name']][i] for a in assets)
