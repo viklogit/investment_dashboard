@@ -133,12 +133,16 @@ def get_live_prices(tickers, ticker_configs=None):
         if ticker_cur != buy_cur:
             fx_ticker = f"{ticker_cur}{buy_cur}=X"
             fx_rate = latest_prices.get(fx_ticker)
+            if fx_rate is None or (hasattr(fx_rate, "isna") and fx_rate.isna()) or (isinstance(fx_rate, float) and pd.isna(fx_rate)):
+                fx_rate = get_fx_rate(ticker_cur, buy_cur)
             if fx_rate:
                 buy_price = base_price * fx_rate
                 
         if ticker_cur != target_cur:
             fx_ticker = f"{ticker_cur}{target_cur}=X"
             fx_rate = latest_prices.get(fx_ticker)
+            if fx_rate is None or (hasattr(fx_rate, "isna") and fx_rate.isna()) or (isinstance(fx_rate, float) and pd.isna(fx_rate)):
+                fx_rate = get_fx_rate(ticker_cur, target_cur)
             if fx_rate:
                 target_price = base_price * fx_rate
                 
@@ -195,17 +199,20 @@ def get_daily_history(tickers, days=30, ticker_configs=None):
             date_str = date.strftime('%Y-%m-%d')
             
             target_price = price
-            if fx_ticker and fx_ticker in close_df.columns:
-                fx_rate = close_df.loc[date, fx_ticker]
-                if pd.isna(fx_rate):
-                    # Find nearest FX rate
-                    v_fx = close_df[fx_ticker].dropna()
-                    if not v_fx.empty:
-                        idx = v_fx.index.get_indexer([date], method='nearest')[0]
-                        fx_rate = v_fx.iloc[idx]
-                    else:
-                        fx_rate = 1.0
-                target_price = price * fx_rate
+            if fx_ticker:
+                fx_rate = None
+                if fx_ticker in close_df.columns:
+                    fx_rate = close_df.loc[date, fx_ticker]
+                    if pd.isna(fx_rate):
+                        # Find nearest FX rate
+                        v_fx = close_df[fx_ticker].dropna()
+                        if not v_fx.empty:
+                            idx = v_fx.index.get_indexer([date], method='nearest')[0]
+                            fx_rate = v_fx.iloc[idx]
+                if fx_rate is None or pd.isna(fx_rate):
+                    fx_rate = get_fx_rate(ticker_cur, target_cur)
+                if fx_rate:
+                    target_price = price * fx_rate
                 
             results[ticker][date_str] = float(target_price)
             
@@ -316,18 +323,20 @@ def get_timeframe_prices(tickers, ticker_configs=None):
                         continue
 
                 # Convert to target currency
-                if fx_ticker and fx_ticker in close_df.columns:
-                    fx_rate = close_df.iloc[idx][fx_ticker]
-                    if pd.isna(fx_rate):
-                        v_fx = close_df[fx_ticker].dropna()
-                        if not v_fx.empty:
-                            fv_idx = v_fx.index.get_indexer([target_dt], method='nearest')[0]
-                            fx_rate = v_fx.iloc[fv_idx]
-                        else:
-                            fx_rate = 1.0
-                    target_price = base_price * fx_rate
-                else:
-                    target_price = base_price
+                target_price = base_price
+                if fx_ticker:
+                    fx_rate = None
+                    if fx_ticker in close_df.columns:
+                        fx_rate = close_df.iloc[idx][fx_ticker]
+                        if pd.isna(fx_rate):
+                            v_fx = close_df[fx_ticker].dropna()
+                            if not v_fx.empty:
+                                fv_idx = v_fx.index.get_indexer([target_dt], method='nearest')[0]
+                                fx_rate = v_fx.iloc[fv_idx]
+                    if fx_rate is None or pd.isna(fx_rate):
+                        fx_rate = get_fx_rate(ticker_cur, target_cur)
+                    if fx_rate:
+                        target_price = base_price * fx_rate
                     
                 results[ticker][label] = float(target_price)
             except Exception:

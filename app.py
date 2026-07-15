@@ -17,7 +17,7 @@ def api_portfolio():
     c.execute("SELECT * FROM months ORDER BY id ASC")
     months = [dict(r) for r in c.fetchall()]
     
-    c.execute("SELECT * FROM assets ORDER BY id ASC")
+    c.execute("SELECT * FROM assets ORDER BY display_order ASC, id ASC")
     assets = [dict(r) for r in c.fetchall()]
     
     contributions = {a['name']: [] for a in assets}
@@ -130,6 +130,10 @@ def api_portfolio():
         pnl = current_val - total_inv
         pnl_pct = (pnl / total_inv * 100) if total_inv > 0 else 0.0
         
+        total_inv_buy_curr = sum(contributions[a['name']])
+        avg_buy_price_buy_curr = (total_inv_buy_curr / latest_units) if latest_units > 0 else 0.0
+        avg_buy_price_target_curr = (total_inv / latest_units) if latest_units > 0 else 0.0
+        
         asset_stats.append({
             "id": a['id'],
             "name": a['name'],
@@ -139,7 +143,12 @@ def api_portfolio():
             "current_value": round(current_val, 2),
             "total_pnl": round(pnl, 2),
             "pnl_percent": round(pnl_pct, 2),
-            "is_live": is_live_asset
+            "is_live": is_live_asset,
+            "buy_currency": a.get('buy_currency', 'EUR'),
+            "target_currency": a.get('target_currency', 'EUR'),
+            "total_units": round(latest_units, 4),
+            "avg_buy_price_buy_curr": round(avg_buy_price_buy_curr, 4),
+            "avg_buy_price_target_curr": round(avg_buy_price_target_curr, 4)
         })
 
     latest_port_value = portfolio_valuations[-1] if portfolio_valuations else 0.0
@@ -227,7 +236,8 @@ def api_portfolio():
     
     daily_performance = {
         "dates": sorted_dates,
-        "assets": {a['name']: [] for a in assets}
+        "assets": {a['name']: [] for a in assets},
+        "invested": {a['name']: [] for a in assets}
     }
     
     for d_str in sorted_dates:
@@ -262,6 +272,7 @@ def api_portfolio():
                     d_pnl = (u_day * p_day) - inv_day
             
             daily_performance["assets"][a['name']].append(round(d_pnl, 2))
+            daily_performance["invested"][a['name']].append(round(inv_day, 2))
 
     conn.close()
     return jsonify({
@@ -417,6 +428,68 @@ def api_edit_asset():
     finally:
         conn.close()
 
+@app.route("/api/reorder_asset", methods=["POST"])
+def api_reorder_asset():
+    body = request.get_json(force=True)
+    asset_id = body.get("id")
+    direction = body.get("direction") # 'up' or 'down'
+    if not asset_id or direction not in ('up', 'down'):
+        return jsonify({"ok": False, "error": "Invalid parameters"}), 400
+        
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        # Get all assets in current order
+        c.execute("SELECT id, display_order FROM assets ORDER BY display_order ASC, id ASC")
+        assets = [dict(r) for r in c.fetchall()]
+        
+        # Find current asset index
+        idx = next((i for i, a in enumerate(assets) if a['id'] == asset_id), None)
+        if idx is None:
+            return jsonify({"ok": False, "error": "Asset not found"}), 404
+            
+        target_idx = idx - 1 if direction == 'up' else idx + 1
+        if 0 <= target_idx < len(assets):
+            # First, update all assets to have sequential display orders (0, 1, 2...)
+            # to make swapping clean and resolve any default 0 display_orders
+            for i, a in enumerate(assets):
+                c.execute("UPDATE assets SET display_order=? WHERE id=?", (i, a['id']))
+            
+            # Now swap display_order of assets[idx] and assets[target_idx]
+            c.execute("UPDATE assets SET display_order=? WHERE id=?", (target_idx, assets[idx]['id']))
+            c.execute("UPDATE assets SET display_order=? WHERE id=?", (idx, assets[target_idx]['id']))
+            
+            conn.commit()
+            return jsonify({"ok": True})
+        else:
+            return jsonify({"ok": True, "msg": "Already at boundary"})
+    except Exception as e:
+        print(f"Error reordering asset: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/set_asset_order", methods=["POST"])
+def api_set_asset_order():
+    """Accept a full list of asset IDs in the desired display order and persist it."""
+    body = request.get_json(force=True)
+    ordered_ids = body.get("ids")  # list of asset IDs in desired order
+    if not ordered_ids or not isinstance(ordered_ids, list):
+        return jsonify({"ok": False, "error": "Expected 'ids' list"}), 400
+
+    conn = get_db()
+    c = conn.cursor()
+    try:
+        for idx, asset_id in enumerate(ordered_ids):
+            c.execute("UPDATE assets SET display_order=? WHERE id=?", (idx, asset_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Error setting asset order: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route("/api/delete_month", methods=["POST"])
 def api_delete_month():
     body = request.get_json(force=True)
@@ -484,7 +557,9 @@ def api_update_data():
             if bp == 0:
                 c.execute("SELECT price FROM valuations WHERE asset_id=? AND month_id=?", (asset_id, month_id))
                 v_row = c.fetchone()
-                bp = v_row['price'] if v_row and v_row['price'] else 0.0
+                target_p = v_row['price'] if v_row and v_row['price'] else 0.0
+                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                bp = target_p / fx_rate if fx_rate > 0 else target_p
 
             amt = value * bp
             c.execute("UPDATE contributions SET units=?, amount=?, buy_price=? WHERE asset_id=? AND month_id=?", (value, amt, bp, asset_id, month_id))
@@ -507,7 +582,9 @@ def api_update_data():
             if bp == 0:
                 c.execute("SELECT price FROM valuations WHERE asset_id=? AND month_id=?", (asset_id, month_id))
                 v_row = c.fetchone()
-                bp = v_row['price'] if v_row and v_row['price'] else 0.0
+                target_p = v_row['price'] if v_row and v_row['price'] else 0.0
+                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                bp = target_p / fx_rate if fx_rate > 0 else target_p
             
             u = value / bp if bp > 0 else 0.0
             c.execute("UPDATE contributions SET amount=?, units=?, buy_price=? WHERE asset_id=? AND month_id=?", (value, u, bp, asset_id, month_id))
@@ -536,9 +613,14 @@ def api_update_data():
             val = c.fetchone()
             if val:
                 prc = val['price'] if val['price'] else 0.0
-
-                # price is stored in buy_currency, but market_value must be stored in target_currency
-                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                
+                # Fallback to buy price if valuation price is 0
+                if prc == 0:
+                    c.execute("SELECT buy_price FROM contributions WHERE asset_id=? AND month_id=?", (asset['id'], mid))
+                    cont_row = c.fetchone()
+                    bp = cont_row['buy_price'] if cont_row else 0.0
+                    fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                    prc = bp * fx_rate
 
                 if update_type == 'valuation' and mid == month_id:
                     # If the user manually entered a valuation, keep that valuation but still update units_held
@@ -547,8 +629,7 @@ def api_update_data():
                         (u_held, asset['id'], mid)
                     )
                 else:
-                    raw_mv_buy_currency = u_held * prc
-                    new_mv = raw_mv_buy_currency * fx_rate
+                    new_mv = u_held * prc
                     c.execute(
                         "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
                         (u_held, new_mv, asset['id'], mid)
@@ -605,8 +686,16 @@ def api_update_investment_full():
             val = c.fetchone()
             if val:
                 prc = val['price'] if val['price'] else 0.0
-                fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
-                new_mv = (u_held * prc) * fx_rate
+                
+                # Fallback to buy price if valuation price is 0
+                if prc == 0:
+                    c.execute("SELECT buy_price FROM contributions WHERE asset_id=? AND month_id=?", (asset_id, mid))
+                    cont_row = c.fetchone()
+                    bp = cont_row['buy_price'] if cont_row else 0.0
+                    fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
+                    prc = bp * fx_rate
+
+                new_mv = u_held * prc
                 c.execute(
                     "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
                     (u_held, new_mv, asset_id, mid)

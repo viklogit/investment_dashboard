@@ -128,6 +128,14 @@
   .filter-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); cursor: pointer; font-size: 11px; font-weight: 600; color: var(--muted); transition: all 0.2s; }
   .filter-btn:hover { background: var(--cream); border-color: var(--navy-mid); }
   .filter-btn.active { background: var(--navy); color: var(--white); border-color: var(--navy); }
+
+  /* Drag-and-drop ordering */
+  .drag-handle { cursor: grab; color: var(--muted); font-size: 18px; padding: 0 8px; user-select: none; opacity: 0.5; transition: opacity 0.2s; display: inline-block; line-height: 1; }
+  .drag-handle:hover { opacity: 1; color: var(--navy); cursor: grab; }
+  .drag-handle:active { cursor: grabbing; }
+  tr[draggable] { transition: background 0.15s; }
+  tr[draggable].drag-over { background: var(--gold-light) !important; outline: 2px dashed var(--gold); outline-offset: -2px; }
+  tr[draggable].dragging { opacity: 0.4; }
 </style>
 
 </head>
@@ -188,20 +196,26 @@
           </div>
         </div>
         <div class="pnl-charts-main">
-          <div class="chart-filter-row">
-            <button class="filter-btn active" onclick="setChartTimeframe('all')">ALL</button>
-            <button class="filter-btn" onclick="setChartTimeframe('1y')">1Y</button>
-            <button class="filter-btn" onclick="setChartTimeframe('ytd')">YTD</button>
-            <button class="filter-btn" onclick="setChartTimeframe('6m')">6M</button>
-            <button class="filter-btn" onclick="setChartTimeframe('1m')">1M</button>
-            <button class="filter-btn" onclick="setChartTimeframe('1w')">1W</button>
+          <div class="chart-filter-row" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; gap: 8px;">
+              <button class="filter-btn active" id="btn-mode-val" onclick="setChartMode('value')">Value (€)</button>
+              <button class="filter-btn" id="btn-mode-pct" onclick="setChartMode('percent')">Percent (%)</button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="filter-btn active" onclick="setChartTimeframe('all')">ALL</button>
+              <button class="filter-btn" onclick="setChartTimeframe('1y')">1Y</button>
+              <button class="filter-btn" onclick="setChartTimeframe('ytd')">YTD</button>
+              <button class="filter-btn" onclick="setChartTimeframe('6m')">6M</button>
+              <button class="filter-btn" onclick="setChartTimeframe('1m')">1M</button>
+              <button class="filter-btn" onclick="setChartTimeframe('1w')">1W</button>
+            </div>
           </div>
           <div>
-            <div class="pnl-sidebar-title">Cumulative Profit/Loss (€)</div>
+            <div class="pnl-sidebar-title" id="pnl-cum-title">Cumulative Profit/Loss (€)</div>
             <div class="chart-container-pnl"><canvas id="cumulativePnLChart"></canvas></div>
           </div>
           <div>
-            <div class="pnl-sidebar-title">Monthly Delta Profit/Loss (€)</div>
+            <div class="pnl-sidebar-title" id="pnl-monthly-title">Monthly Delta Profit/Loss (€)</div>
             <div class="chart-container-pnl"><canvas id="monthlyPnLChart"></canvas></div>
           </div>
         </div>
@@ -366,6 +380,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency the asset is quoted in on the exchange (e.g. USD for TSLA, or GBP for London listed stocks).</span>
     </div>
     <div class="form-group">
       <label class="form-label">Buying Currency (Bank)</label>
@@ -389,6 +404,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency you use to purchase the asset (contributions and purchase prices will be recorded in this currency).</span>
     </div>
     <div class="form-group">
       <label class="form-label">Target Currency (Dashboard)</label>
@@ -412,6 +428,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency of your portfolio dashboard (valuations, total returns, and stats will be converted to this currency).</span>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-navy" onclick="closeModal('asset-modal')">Cancel</button>
@@ -470,6 +487,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency the asset is quoted in on the exchange (e.g. USD for TSLA, or GBP for London listed stocks).</span>
     </div>
     <div class="form-group">
       <label class="form-label">Buying Currency (Bank)</label>
@@ -493,6 +511,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency you use to purchase the asset (contributions and purchase prices will be recorded in this currency).</span>
     </div>
     <div class="form-group">
       <label class="form-label">Target Currency (Dashboard)</label>
@@ -516,6 +535,7 @@
         <option value="ZAR">South African Rand (R)</option>
         <option value="MXN">Mexican Peso ($)</option>
       </select>
+      <span style="font-size:10px; color:var(--muted); margin-top:4px; display:block">The currency of your portfolio dashboard (valuations, total returns, and stats will be converted to this currency).</span>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-navy" onclick="closeModal('edit-asset-modal')">Cancel</button>
@@ -633,6 +653,8 @@ function renderAssetStats() {
     <th style="text-align:left; padding-left:22px">Asset</th>
     <th style="text-align:left">Ticker / Type</th>
     <th style="text-align:right">Total Invested (€)</th>
+    <th style="text-align:right">Total Units</th>
+    <th style="text-align:right">Avg Buy Price</th>
     <th style="text-align:right">Current Value (€)</th>
     <th style="text-align:right">Total PnL (€)</th>
     <th style="text-align:right; padding-right:22px">Return (%)</th>
@@ -640,12 +662,23 @@ function renderAssetStats() {
   
   STATE.asset_stats.forEach(as => {
     const liveIcon = as.is_live ? '<span class="live-badge"><span class="live-dot"></span>Live</span>' : '';
+    let avgBuyPriceStr = '—';
+    if (as.total_units > 0) {
+      if (as.buy_currency !== as.target_currency) {
+        avgBuyPriceStr = `${fmt(as.avg_buy_price_buy_curr, as.buy_currency)}<br><span style="font-size:10px; color:var(--muted)">(${fmt(as.avg_buy_price_target_curr, as.target_currency)})</span>`;
+      } else {
+        avgBuyPriceStr = fmt(as.avg_buy_price_target_curr, as.target_currency);
+      }
+    }
+    
     html += `<tr>
       <td style="text-align:left; padding-left:22px"><strong>${as.name}</strong></td>
       <td style="text-align:left; color:var(--muted); font-size:11px">
         ${as.ticker ? `<code>${as.ticker}</code>` : '—'} • ${as.asset_type}
       </td>
       <td style="text-align:right">${fmt(as.total_invested)}</td>
+      <td style="text-align:right">${as.total_units > 0 ? as.total_units.toFixed(4) : '—'}</td>
+      <td style="text-align:right">${avgBuyPriceStr}</td>
       <td style="text-align:right">${fmt(as.current_value)} ${liveIcon}</td>
       <td style="text-align:right" class="${numClass(as.total_pnl)}">
         ${numSign(as.total_pnl)}${fmt(as.total_pnl)}
@@ -696,9 +729,22 @@ function toggleAllPnLAssets(bool) {
 
 function setChartTimeframe(tf) {
   chartTimeframe = tf;
-  document.querySelectorAll('.filter-btn').forEach(btn => {
+  document.querySelectorAll('.chart-filter-row > div:nth-child(2) > .filter-btn').forEach(btn => {
     btn.classList.toggle('active', btn.textContent.toLowerCase() === tf);
   });
+  renderPnLCharts();
+}
+
+let chartMode = 'value'; // 'value' or 'percent'
+function setChartMode(mode) {
+  chartMode = mode;
+  document.getElementById('btn-mode-val').classList.toggle('active', mode === 'value');
+  document.getElementById('btn-mode-pct').classList.toggle('active', mode === 'percent');
+  
+  const isPercent = mode === 'percent';
+  document.getElementById('pnl-cum-title').textContent = isPercent ? 'Cumulative Profit/Loss (%)' : 'Cumulative Profit/Loss (€)';
+  document.getElementById('pnl-monthly-title').textContent = isPercent ? 'Monthly Delta Profit/Loss (%)' : 'Monthly Delta Profit/Loss (€)';
+  
   renderPnLCharts();
 }
 
@@ -715,20 +761,34 @@ function calculatePnLData() {
     
     let cumulativeSeries = new Array(labels.length).fill(0);
     let monthlySeries = new Array(labels.length).fill(0);
+    let investedSeries = new Array(labels.length).fill(0);
     
     selectedPnLAssetNames.forEach(name => {
       const assetSeries = dp.assets[name] || [];
+      const investedAssetSeries = dp.invested[name] || [];
       const sliced = assetSeries.slice(-sliceSize);
+      const slicedInvested = investedAssetSeries.slice(-sliceSize);
       sliced.forEach((val, i) => {
         cumulativeSeries[i] += val;
+        investedSeries[i] += (slicedInvested[i] || 0);
         if (i > 0) {
             monthlySeries[i] += (val - sliced[i-1]);
         }
       });
     });
     
+    let cumulativePercentSeries = cumulativeSeries.map((val, idx) => {
+      const inv = investedSeries[idx];
+      return inv > 0 ? (val / inv * 100) : 0;
+    });
+
+    let monthlyPercentSeries = monthlySeries.map((val, idx) => {
+      const inv = investedSeries[idx];
+      return inv > 0 ? (val / inv * 100) : 0;
+    });
+
     // Ensure we have at least some data
-    if (labels.length > 0) return { labels, cumulativeSeries, monthlySeries };
+    if (labels.length > 0) return { labels, cumulativeSeries, monthlySeries, cumulativePercentSeries, monthlyPercentSeries };
   }
 
   let labels = [...STATE.months.map(m => m.label), "LIVE"];
@@ -736,6 +796,7 @@ function calculatePnLData() {
   
   let cumulativeSeries = new Array(numMonths + 1).fill(0);
   let monthlySeries = new Array(numMonths + 1).fill(0);
+  let investedSeries = new Array(numMonths + 1).fill(0);
   
   selectedPnLAssetNames.forEach(name => {
     const vals = STATE.valuations[name] || [];
@@ -746,16 +807,23 @@ function calculatePnLData() {
     for (let i = 0; i < numMonths; i++) {
       cumulativeSeries[i] += (vals[i] || 0) - (cumInv[i] || 0);
       monthlySeries[i] += (mPnl[i] || 0);
+      investedSeries[i] += (cumInv[i] || 0);
     }
     
     if (stats) {
       cumulativeSeries[numMonths] += stats.total_pnl;
       const lastMonthPnL = numMonths > 0 ? ((vals[numMonths-1] || 0) - (cumInv[numMonths-1] || 0)) : 0;
       monthlySeries[numMonths] += (stats.total_pnl - lastMonthPnL);
+      investedSeries[numMonths] += stats.total_invested;
     }
   });
 
   // Filter based on chartTimeframe
+  let slicedLabels = labels;
+  let slicedCumulative = cumulativeSeries;
+  let slicedMonthly = monthlySeries;
+  let slicedInvested = investedSeries;
+
   if (chartTimeframe !== 'all') {
     let sliceSize = 0;
     if (chartTimeframe === '1y') sliceSize = 13; // 12 months + Live
@@ -772,13 +840,30 @@ function calculatePnLData() {
     }
     
     if (sliceSize > 0 && sliceSize < labels.length) {
-        labels = labels.slice(-sliceSize);
-        cumulativeSeries = cumulativeSeries.slice(-sliceSize);
-        monthlySeries = monthlySeries.slice(-sliceSize);
+        slicedLabels = labels.slice(-sliceSize);
+        slicedCumulative = cumulativeSeries.slice(-sliceSize);
+        slicedMonthly = monthlySeries.slice(-sliceSize);
+        slicedInvested = investedSeries.slice(-sliceSize);
     }
   }
+
+  let cumulativePercentSeries = slicedCumulative.map((val, idx) => {
+    const inv = slicedInvested[idx];
+    return inv > 0 ? (val / inv * 100) : 0;
+  });
+
+  let monthlyPercentSeries = slicedMonthly.map((val, idx) => {
+    const inv = slicedInvested[idx];
+    return inv > 0 ? (val / inv * 100) : 0;
+  });
   
-  return { labels, cumulativeSeries, monthlySeries };
+  return { 
+    labels: slicedLabels, 
+    cumulativeSeries: slicedCumulative, 
+    monthlySeries: slicedMonthly,
+    cumulativePercentSeries,
+    monthlyPercentSeries
+  };
 }
 
 function renderTimeframeStats() {
@@ -822,13 +907,16 @@ function renderCumulativePnLSeries(data) {
   gradient.addColorStop(0, '#F4B94244');
   gradient.addColorStop(1, '#F4B94200');
 
+  const isPercent = chartMode === 'percent';
+  const plotData = isPercent ? data.cumulativePercentSeries : data.cumulativeSeries;
+
   charts.cumulativePnL = new Chart(ctx, {
     type: 'line',
     data: {
       labels: data.labels,
       datasets: [{
-        label: 'Cumulative PnL',
-        data: data.cumulativeSeries,
+        label: isPercent ? 'Cumulative PnL (%)' : 'Cumulative PnL (€)',
+        data: plotData,
         borderColor: '#F4B942',
         backgroundColor: gradient,
         borderWidth: 3,
@@ -845,14 +933,20 @@ function renderCumulativePnLSeries(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `Total PnL: ${fmt(ctx.parsed.y)}`
+            label: (ctx) => {
+              const val = data.cumulativeSeries[ctx.dataIndex];
+              const pct = data.cumulativePercentSeries[ctx.dataIndex];
+              return `Total PnL: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% (${fmt(val)})`;
+            }
           }
         }
       },
       scales: {
         y: {
           grid: { color: 'rgba(0,0,0,0.05)' },
-          ticks: { callback: (v) => fmt(v) }
+          ticks: {
+            callback: (v) => isPercent ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : fmt(v)
+          }
         },
         x: { grid: { display: false } }
       }
@@ -864,19 +958,22 @@ function renderMonthlyPnLSeries(data) {
   if (charts.monthlyPnL) charts.monthlyPnL.destroy();
   const ctx = document.getElementById('monthlyPnLChart').getContext('2d');
   
+  const isPercent = chartMode === 'percent';
+  const plotData = isPercent ? data.monthlyPercentSeries : data.monthlySeries;
+
   charts.monthlyPnL = new Chart(ctx, {
     type: 'line',
     data: {
       labels: data.labels,
       datasets: [{
-        label: 'Monthly PnL',
-        data: data.monthlySeries,
+        label: isPercent ? 'Monthly PnL (%)' : 'Monthly PnL (€)',
+        data: plotData,
         borderColor: '#10B981',
         backgroundColor: '#10B98122',
         borderWidth: 2,
         tension: 0.3,
         fill: true,
-        pointBackgroundColor: (ctx) => data.monthlySeries[ctx.dataIndex] >= 0 ? '#10B981' : '#EF4444',
+        pointBackgroundColor: (ctx) => plotData[ctx.dataIndex] >= 0 ? '#10B981' : '#EF4444',
         pointRadius: 4
       }]
     },
@@ -886,14 +983,20 @@ function renderMonthlyPnLSeries(data) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `Monthly Delta: ${fmt(ctx.parsed.y)}`
+            label: (ctx) => {
+              const val = data.monthlySeries[ctx.dataIndex];
+              const pct = data.monthlyPercentSeries[ctx.dataIndex];
+              return `Monthly Delta: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% (${fmt(val)})`;
+            }
           }
         }
       },
       scales: {
         y: {
           grid: { color: 'rgba(0,0,0,0.05)' },
-          ticks: { callback: (v) => fmt(v) }
+          ticks: {
+            callback: (v) => isPercent ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : fmt(v)
+          }
         },
         x: { grid: { display: false } }
       }
@@ -977,6 +1080,7 @@ function renderMonthlyBarChart() {
 function renderStats() {
   const { total_invested, current_value, total_pnl, is_live } = STATE.stats;
   const liveLabel = is_live ? '<span class="live-badge"><span class="live-dot"></span>Live</span>' : '';
+  const total_pnl_pct = total_invested > 0 ? (total_pnl / total_invested * 100) : 0;
   
   document.getElementById('stats-row').innerHTML = `
     <div class="stat-card">
@@ -990,6 +1094,10 @@ function renderStats() {
     <div class="stat-card ${total_pnl >= 0 ? 'green' : ''}">
       <div class="stat-label">Total PnL</div>
       <div class="stat-value ${total_pnl > 0 ? 'green' : total_pnl < 0 ? 'red' : ''}">${numSign(total_pnl)}${fmt(total_pnl, "EUR")}</div>
+      <div class="tf-stat-pct ${total_pnl >= 0 ? 'positive' : 'negative'}" style="margin-top: 6px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+        <span>${total_pnl >= 0 ? '▲' : '▼'}</span>
+        <span>${total_pnl >= 0 ? '+' : ''}${total_pnl_pct.toFixed(2)}%</span>
+      </div>
     </div>
   `;
 }
@@ -1147,16 +1255,20 @@ function renderAssetsTable() {
     <th style="text-align:center">Actions</th>
   </tr></thead><tbody>`;
   
-  STATE.assets.forEach(a => {
+  STATE.assets.forEach((a, index) => {
     const sourceIcon = a.price_source === 'auto' ? '🤖 Auto' : '✏️ Manual';
-    html += `<tr>
-      <td><strong>${a.name}</strong></td>
+    
+    html += `<tr draggable="true" data-asset-id="${a.id}" id="asset-row-${a.id}">
+      <td>
+        <span class="drag-handle" title="Drag to reorder">⠿</span>
+        <strong>${a.name}</strong>
+      </td>
       <td style="text-align:left; font-family:var(--mono)">${a.ticker || '—'}</td>
       <td style="text-align:left">${a.asset_type}</td>
       <td style="text-align:left">${a.currency || 'EUR'} (Buy: ${a.buy_currency || 'EUR'}) ➔ ${a.target_currency || 'EUR'}</td>
       <td style="text-align:left">${sourceIcon}</td>
       <td style="text-align:center">
-        <button class="btn btn-sm btn-outline btn-navy" style="display:inline-flex" onclick="editAsset(${a.id}, '${a.name}')">✎ Edit</button>
+        <button class="btn btn-sm btn-outline btn-navy" style="display:inline-flex; margin-right:4px;" onclick="editAsset(${a.id}, '${a.name}')">✎ Edit</button>
         <button class="btn btn-sm btn-danger" style="display:inline-flex; border-color:transparent" onclick="deleteAsset(${a.id}, '${a.name}')">🗑️ Delete</button>
       </td>
     </tr>`;
@@ -1164,6 +1276,7 @@ function renderAssetsTable() {
   
   html += `</tbody></table>`;
   document.getElementById('assets-table-wrap').innerHTML = html;
+  initDragAndDrop();
 }
 
 function editCell(td, assetId, monthId, typeStr) {
@@ -1308,6 +1421,81 @@ async function deleteAsset(id, name) {
   const d = await r.json();
   if (d.ok) { showToast('Asset deleted', 'success'); boot(); }
   else showToast(d.error, 'error');
+}
+
+function initDragAndDrop() {
+  const tbody = document.querySelector('#assets-table-wrap table tbody');
+  if (!tbody) return;
+
+  let dragSrcRow = null;
+
+  function handleDragStart(e) {
+    dragSrcRow = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.assetId);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // Highlight the row being hovered
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+    this.classList.add('drag-over');
+    return false;
+  }
+
+  function handleDragLeave() {
+    this.classList.remove('drag-over');
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragSrcRow !== this) {
+      // Move the dragged row before or after the target row
+      const rows = [...tbody.querySelectorAll('tr')];
+      const srcIdx = rows.indexOf(dragSrcRow);
+      const tgtIdx = rows.indexOf(this);
+      if (srcIdx < tgtIdx) {
+        tbody.insertBefore(dragSrcRow, this.nextSibling);
+      } else {
+        tbody.insertBefore(dragSrcRow, this);
+      }
+    }
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'dragging'));
+    return false;
+  }
+
+  async function handleDragEnd() {
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'dragging'));
+    // Collect new order and persist
+    const orderedIds = [...tbody.querySelectorAll('tr')].map(r => parseInt(r.dataset.assetId));
+    try {
+      const r = await fetch('/api/set_asset_order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: orderedIds })
+      });
+      const d = await r.json();
+      if (d.ok) {
+        showToast('Order saved', 'success');
+        boot();
+      } else {
+        showToast(d.error || 'Failed to save order', 'error');
+      }
+    } catch(e) {
+      showToast('Server error', 'error');
+    }
+  }
+
+  tbody.querySelectorAll('tr[draggable]').forEach(row => {
+    row.addEventListener('dragstart', handleDragStart);
+    row.addEventListener('dragover', handleDragOver);
+    row.addEventListener('dragleave', handleDragLeave);
+    row.addEventListener('drop', handleDrop);
+    row.addEventListener('dragend', handleDragEnd);
+  });
 }
 
 async function editMonth(id, oldLabel) {

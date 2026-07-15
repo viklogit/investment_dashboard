@@ -26,9 +26,18 @@ def init_db():
             currency TEXT DEFAULT 'EUR',
             buy_currency TEXT DEFAULT 'EUR',
             target_currency TEXT DEFAULT 'EUR',
-            price_source TEXT DEFAULT 'manual'
+            price_source TEXT DEFAULT 'manual',
+            display_order INTEGER DEFAULT 0
         )
     """)
+    
+    # Check if display_order column already exists (for existing databases)
+    c.execute("PRAGMA table_info(assets)")
+    columns = [row[1] for row in c.fetchall()]
+    if "display_order" not in columns:
+        print("Adding display_order column to assets table...")
+        c.execute("ALTER TABLE assets ADD COLUMN display_order INTEGER DEFAULT 0")
+        conn.commit()
     
     # Create Months Table
     # label: "Jan 2024", date_end: "2024-01-31" (ISO string)
