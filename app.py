@@ -24,6 +24,7 @@ def api_portfolio():
     valuations = {a['name']: [] for a in assets} 
     price_sources = {a['name']: [] for a in assets}
     prices = {a['name']: [] for a in assets}
+    prices_original = {a['name']: [] for a in assets}
     units_held = {a['name']: [] for a in assets}
     monthly_pnl = {a['name']: [] for a in assets}
     cumulative_invested = {a['name']: [] for a in assets}
@@ -57,7 +58,7 @@ def api_portfolio():
             
             cb_target = cb_raw * fx_rate
             
-            c.execute("SELECT market_value, price, units_held, source, is_manual FROM valuations WHERE asset_id=? AND month_id=?", (a['id'], mid))
+            c.execute("SELECT market_value, price, price_original, units_held, source, is_manual FROM valuations WHERE asset_id=? AND month_id=?", (a['id'], mid))
             val_row = c.fetchone()
             mv_target = val_row['market_value'] if val_row else 0.0
             
@@ -71,6 +72,15 @@ def api_portfolio():
             # Use target_currency for everything else
             valuations[a['name']].append(round(mv_target, 2))
             prices[a['name']].append(val_row['price'] if val_row else None)
+            
+            po = None
+            if val_row:
+                po = val_row['price_original']
+                if (po is None or po == 0) and val_row['price'] is not None and val_row['price'] > 0:
+                    fx_rate_to_target = get_fx_rate(a.get('currency', 'EUR'), a.get('target_currency', 'EUR'))
+                    po = val_row['price'] / fx_rate_to_target if fx_rate_to_target > 0 else val_row['price']
+            prices_original[a['name']].append(po)
+            
             units_held[a['name']].append(val_row['units_held'] if val_row else 0)
             price_sources[a['name']].append({
                 "source": val_row['source'] if val_row else "manual", 
@@ -118,12 +128,24 @@ def api_portfolio():
         total_inv = cumulative_invested[a['name']][-1] if cumulative_invested[a['name']] else 0.0
         
         is_live_asset = False
+        live_price_base = None
+        live_price_target = None
+        
         if a['price_source'] == 'auto' and a['ticker'] in live_prices:
-            current_val = latest_units * live_prices[a['ticker']]['target_price']
+            live_price_target = live_prices[a['ticker']]['target_price']
+            live_price_base = live_prices[a['ticker']].get('base_price')
+            current_val = latest_units * live_price_target
             is_live_asset = True
         else:
             # Fallback to last recorded month's valuation
             current_val = valuations[a['name']][-1] if valuations[a['name']] else 0.0
+            live_price_target = prices[a['name']][-1] if prices[a['name']] else None
+            live_price_base = prices_original[a['name']][-1] if prices_original[a['name']] else None
+
+        if live_price_base is None and live_price_target is not None:
+            # Fallback conversion from target price using fx rate
+            fx_rate_to_target = get_fx_rate(a.get('currency', 'EUR'), a.get('target_currency', 'EUR'))
+            live_price_base = live_price_target / fx_rate_to_target if fx_rate_to_target > 0 else live_price_target
 
         live_port_value += current_val
         
@@ -144,11 +166,14 @@ def api_portfolio():
             "total_pnl": round(pnl, 2),
             "pnl_percent": round(pnl_pct, 2),
             "is_live": is_live_asset,
+            "currency": a.get('currency', 'EUR'),
             "buy_currency": a.get('buy_currency', 'EUR'),
             "target_currency": a.get('target_currency', 'EUR'),
             "total_units": round(latest_units, 4),
             "avg_buy_price_buy_curr": round(avg_buy_price_buy_curr, 4),
-            "avg_buy_price_target_curr": round(avg_buy_price_target_curr, 4)
+            "avg_buy_price_target_curr": round(avg_buy_price_target_curr, 4),
+            "current_price_base": round(live_price_base, 4) if live_price_base is not None else None,
+            "current_price_target": round(live_price_target, 4) if live_price_target is not None else None
         })
 
     latest_port_value = portfolio_valuations[-1] if portfolio_valuations else 0.0
@@ -157,7 +182,7 @@ def api_portfolio():
     # Use live value for the top-level stats
     current_value = live_port_value if live_port_value > 0 else latest_port_value
     total_pnl = current_value - latest_port_invested
-
+    
     stats = {
         "total_invested": round(latest_port_invested, 2),
         "current_value": round(current_value, 2),
@@ -282,6 +307,7 @@ def api_portfolio():
         "cumulative_invested": cumulative_invested,
         "valuations": valuations, 
         "prices": prices,
+        "prices_original": prices_original,
         "units_held": units_held,
         "monthly_pnl": monthly_pnl, 
         "price_sources": price_sources,
@@ -305,7 +331,14 @@ def api_add_month():
     body = request.get_json(force=True)
     label = body["month"].strip()
     date_end = body["date_end"].strip()
-    
+
+    # Validate that date_end is a real calendar date
+    from datetime import datetime as _dt
+    try:
+        _dt.strptime(date_end, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({"ok": False, "error": f"Invalid date: '{date_end}'. Use YYYY-MM-DD with a valid day for that month (e.g. 2026-08-31)."}), 400
+
     conn = get_db()
     c = conn.cursor()
     try:
@@ -538,13 +571,15 @@ def api_update_data():
     c = conn.cursor()
     
     try:
-        c.execute("SELECT id, name, price_source, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
+        c.execute("SELECT id, name, price_source, currency, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
         asset = c.fetchone()
         c.execute("SELECT id FROM months WHERE id=?", (month_id,))
         month = c.fetchone()
         
         if not asset or not month:
             return jsonify({"ok": False, "error": "Asset or Month not found"}), 404
+            
+        asset = dict(asset)
             
         if update_type == 'monthly_units':
             # 1. Update units
@@ -597,7 +632,9 @@ def api_update_data():
             uh = v_row['units_held'] if v_row and v_row['units_held'] else 0.0
             if uh > 0:
                 new_p = value / uh
-                c.execute("UPDATE valuations SET price=? WHERE asset_id=? AND month_id=?", (new_p, asset_id, month_id))
+                fx_rate_to_target = get_fx_rate(asset.get('currency', 'EUR'), asset.get('target_currency', 'EUR'))
+                new_p_orig = new_p / fx_rate_to_target if fx_rate_to_target > 0 else new_p
+                c.execute("UPDATE valuations SET price=?, price_original=? WHERE asset_id=? AND month_id=?", (new_p, new_p_orig, asset_id, month_id))
 
         # RECALCULATE ENTIRE ASSET HISTORY
         c.execute("SELECT m.id, m.label FROM months m ORDER BY m.date_end ASC")
@@ -609,10 +646,11 @@ def api_update_data():
             cont = c.fetchone()
             u_held += cont['units'] if cont else 0.0
             
-            c.execute("SELECT price, market_value, is_manual FROM valuations WHERE asset_id=? AND month_id=?", (asset['id'], mid))
+            c.execute("SELECT price, price_original, market_value, is_manual FROM valuations WHERE asset_id=? AND month_id=?", (asset['id'], mid))
             val = c.fetchone()
             if val:
                 prc = val['price'] if val['price'] else 0.0
+                prc_orig = val['price_original']
                 
                 # Fallback to buy price if valuation price is 0
                 if prc == 0:
@@ -621,18 +659,25 @@ def api_update_data():
                     bp = cont_row['buy_price'] if cont_row else 0.0
                     fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
                     prc = bp * fx_rate
+                    
+                    fx_rate_orig = get_fx_rate(asset['buy_currency'], asset.get('currency', 'EUR'))
+                    prc_orig = bp * fx_rate_orig
+                
+                if prc_orig is None or prc_orig == 0:
+                    fx_rate_to_target = get_fx_rate(asset.get('currency', 'EUR'), asset.get('target_currency', 'EUR'))
+                    prc_orig = prc / fx_rate_to_target if fx_rate_to_target > 0 else prc
 
                 if update_type == 'valuation' and mid == month_id:
-                    # If the user manually entered a valuation, keep that valuation but still update units_held
+                    # If the user manually entered a valuation, keep that valuation but still update units_held and price_original
                     c.execute(
-                        "UPDATE valuations SET units_held=? WHERE asset_id=? AND month_id=?",
-                        (u_held, asset['id'], mid)
+                        "UPDATE valuations SET units_held=?, price_original=? WHERE asset_id=? AND month_id=?",
+                        (u_held, prc_orig, asset['id'], mid)
                     )
                 else:
                     new_mv = u_held * prc
                     c.execute(
-                        "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
-                        (u_held, new_mv, asset['id'], mid)
+                        "UPDATE valuations SET units_held=?, market_value=?, price_original=? WHERE asset_id=? AND month_id=?",
+                        (u_held, new_mv, prc_orig, asset['id'], mid)
                     )
         conn.commit()
         return jsonify({"ok": True})
@@ -658,10 +703,11 @@ def api_update_investment_full():
     c = conn.cursor()
     
     try:
-        c.execute("SELECT id, name, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
+        c.execute("SELECT id, name, currency, buy_currency, target_currency FROM assets WHERE id=?", (asset_id,))
         asset = c.fetchone()
         if not asset:
             return jsonify({"ok": False, "error": "Asset not found"}), 404
+        asset = dict(asset)
             
         # Update contributions
         c.execute("""
@@ -682,10 +728,11 @@ def api_update_investment_full():
             u_held += cont['units'] if cont else 0.0
             
             # Update valuation
-            c.execute("SELECT price FROM valuations WHERE asset_id=? AND month_id=?", (asset_id, mid))
+            c.execute("SELECT price, price_original FROM valuations WHERE asset_id=? AND month_id=?", (asset_id, mid))
             val = c.fetchone()
             if val:
                 prc = val['price'] if val['price'] else 0.0
+                prc_orig = val['price_original']
                 
                 # Fallback to buy price if valuation price is 0
                 if prc == 0:
@@ -694,11 +741,18 @@ def api_update_investment_full():
                     bp = cont_row['buy_price'] if cont_row else 0.0
                     fx_rate = get_fx_rate(asset['buy_currency'], asset['target_currency'])
                     prc = bp * fx_rate
+                    
+                    fx_rate_orig = get_fx_rate(asset['buy_currency'], asset.get('currency', 'EUR'))
+                    prc_orig = bp * fx_rate_orig
+                
+                if prc_orig is None or prc_orig == 0:
+                    fx_rate_to_target = get_fx_rate(asset.get('currency', 'EUR'), asset.get('target_currency', 'EUR'))
+                    prc_orig = prc / fx_rate_to_target if fx_rate_to_target > 0 else prc
 
                 new_mv = u_held * prc
                 c.execute(
-                    "UPDATE valuations SET units_held=?, market_value=? WHERE asset_id=? AND month_id=?",
-                    (u_held, new_mv, asset_id, mid)
+                    "UPDATE valuations SET units_held=?, market_value=?, price_original=? WHERE asset_id=? AND month_id=?",
+                    (u_held, new_mv, prc_orig, asset_id, mid)
                 )
         
         conn.commit()
@@ -747,7 +801,7 @@ def api_fetch_prices():
         return jsonify({"ok": True, "fetched": 0, "msg": "No auto-tracked tickers found."})
 
     # Pass configs to get_price
-    buy_prices_df, target_prices_df = get_price(tickers, start_date, ticker_configs=ticker_configs)
+    buy_prices_df, target_prices_df, original_prices_df = get_price(tickers, start_date, ticker_configs=ticker_configs)
     
     updates = 0
     
@@ -755,18 +809,26 @@ def api_fetch_prices():
         units_held = 0.0
         prev_target_price = 0.0
         prev_buy_price = 0.0
+        prev_original_price = 0.0
         
         for m in months:
             # Convertir la fecha del mes al formato de columna del df: "Jan 2024"
-            month_col = pd.to_datetime(m["date_end"]).strftime("%b %Y")
-            
+            try:
+                month_col = pd.to_datetime(m["date_end"]).strftime("%b %Y")
+            except Exception as date_err:
+                print(f"Skipping month id={m['id']} label={m['label']}: invalid date_end='{m['date_end']}' ({date_err})")
+                continue
+
             fetched_target_price = None
             fetched_buy_price = None
+            fetched_original_price = None
             
             if a["ticker"] in target_prices_df.index and month_col in target_prices_df.columns:
                 fetched_target_price = target_prices_df.loc[a["ticker"], month_col]
             if a["ticker"] in buy_prices_df.index and month_col in buy_prices_df.columns:
                 fetched_buy_price = buy_prices_df.loc[a["ticker"], month_col]
+            if a["ticker"] in original_prices_df.index and month_col in original_prices_df.columns:
+                fetched_original_price = original_prices_df.loc[a["ticker"], month_col]
                 
             # Si es NaN o None, usar el precio anterior
             if pd.notna(fetched_target_price) and fetched_target_price > 0:
@@ -780,6 +842,12 @@ def api_fetch_prices():
                 prev_buy_price = buy_price
             else:
                 buy_price = prev_buy_price
+                
+            if pd.notna(fetched_original_price) and fetched_original_price > 0:
+                original_price = float(fetched_original_price)
+                prev_original_price = original_price
+            else:
+                original_price = prev_original_price
                 
             if target_price and target_price > 0 and buy_price and buy_price > 0:
                 # Contribution
@@ -806,9 +874,9 @@ def api_fetch_prices():
                 
                 c.execute("""
                     UPDATE valuations
-                    SET price=?, units_held=?, market_value=?, source='auto', is_manual=0
+                    SET price=?, price_original=?, units_held=?, market_value=?, source='auto', is_manual=0
                     WHERE asset_id=? AND month_id=?
-                """, (target_price, units_held, market_value, a["id"], m["id"]))
+                """, (target_price, original_price, units_held, market_value, a["id"], m["id"]))
                 
                 updates += 1
 

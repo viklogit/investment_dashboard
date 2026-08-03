@@ -73,6 +73,7 @@ def init_db():
             market_value REAL NOT NULL DEFAULT 0.0,
             units_held REAL NOT NULL DEFAULT 0.0,
             price REAL,
+            price_original REAL,
             is_manual BOOLEAN NOT NULL DEFAULT 1,
             source TEXT DEFAULT 'manual',
             FOREIGN KEY(asset_id) REFERENCES assets(id),

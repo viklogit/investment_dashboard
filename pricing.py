@@ -3,7 +3,7 @@ import pandas as pd
 
 def get_price(tickers, start_date, ticker_configs=None):
     if not tickers:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     
     # Calculate required FX tickers based on configs
     fx_tickers = set()
@@ -34,7 +34,7 @@ def get_price(tickers, start_date, ticker_configs=None):
     else:
         # Fallback for unexpected data structure
         empty_df = pd.DataFrame(index=[pd.to_datetime(start_date).strftime('%b %Y')], columns=tickers).fillna(0)
-        return empty_df, empty_df.copy()
+        return empty_df, empty_df.copy(), empty_df.copy()
 
     # Final prices data
     buy_df = close_df.copy()
@@ -64,14 +64,14 @@ def get_price(tickers, start_date, ticker_configs=None):
                     target_df[ticker] = close_df[ticker] * fx_rate
 
     # Format the index
-    for df in (buy_df, target_df):
+    for df in (buy_df, target_df, close_df):
         df.index = pd.to_datetime(df.index).strftime('%b %Y')
         df.columns.name = None
         df.index.name = None
     
     # Filter out FX tickers and return transposed
     available_tickers = [t for t in tickers if t in buy_df.columns]
-    return buy_df[available_tickers].T, target_df[available_tickers].T
+    return buy_df[available_tickers].T, target_df[available_tickers].T, close_df[available_tickers].T
 
 def get_live_prices(tickers, ticker_configs=None):
     """Fetch the latest available price for the given tickers and convert to target_currency and buy_currency."""
@@ -148,7 +148,8 @@ def get_live_prices(tickers, ticker_configs=None):
                 
         results[ticker] = {
             'buy_price': float(buy_price),
-            'target_price': float(target_price)
+            'target_price': float(target_price),
+            'base_price': float(base_price)
         }
         
     return results

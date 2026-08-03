@@ -655,6 +655,7 @@ function renderAssetStats() {
     <th style="text-align:right">Total Invested (€)</th>
     <th style="text-align:right">Total Units</th>
     <th style="text-align:right">Avg Buy Price</th>
+    <th style="text-align:right">Current Price</th>
     <th style="text-align:right">Current Value (€)</th>
     <th style="text-align:right">Total PnL (€)</th>
     <th style="text-align:right; padding-right:22px">Return (%)</th>
@@ -671,6 +672,15 @@ function renderAssetStats() {
       }
     }
     
+    let currentPriceStr = '—';
+    if (as.current_price_target !== null && as.current_price_target !== undefined) {
+      if (as.currency && as.currency !== as.target_currency) {
+        currentPriceStr = `${fmt(as.current_price_base, as.currency)}<br><span style="font-size:10px; color:var(--muted)">(${fmt(as.current_price_target, as.target_currency)})</span>`;
+      } else {
+        currentPriceStr = fmt(as.current_price_target, as.target_currency);
+      }
+    }
+    
     html += `<tr>
       <td style="text-align:left; padding-left:22px"><strong>${as.name}</strong></td>
       <td style="text-align:left; color:var(--muted); font-size:11px">
@@ -679,6 +689,7 @@ function renderAssetStats() {
       <td style="text-align:right">${fmt(as.total_invested)}</td>
       <td style="text-align:right">${as.total_units > 0 ? as.total_units.toFixed(4) : '—'}</td>
       <td style="text-align:right">${avgBuyPriceStr}</td>
+      <td style="text-align:right">${currentPriceStr}</td>
       <td style="text-align:right">${fmt(as.current_value)} ${liveIcon}</td>
       <td style="text-align:right" class="${numClass(as.total_pnl)}">
         ${numSign(as.total_pnl)}${fmt(as.total_pnl)}
@@ -1179,7 +1190,17 @@ function buildTable(titles, dataDict, footerRow, typeStr) {
       if (typeStr === 'pnl') {
         html += `<td class="${numClass(val)}">${val===0 ? '—' : numSign(val)+fmt(val, t_cur)}</td>`;
       } else if (typeStr === 'price') {
-        html += `<td>${(val===null || val===undefined || val===0) ? '—' : fmt(val, t_cur)}</td>`;
+        let val_orig = null;
+        if (STATE.prices_original && STATE.prices_original[a.name]) {
+          val_orig = STATE.prices_original[a.name][j];
+        }
+        if (val === null || val === undefined || val === 0) {
+          html += `<td>—</td>`;
+        } else if (val_orig && a.currency !== t_cur) {
+          html += `<td>${fmt(val_orig, a.currency || 'EUR')}<br><span style="font-size:10px; color:var(--muted)">(${fmt(val, t_cur)})</span></td>`;
+        } else {
+          html += `<td>${fmt(val, t_cur)}</td>`;
+        }
       } else if (typeStr === 'valuation') {
         let icon = "";
         let tooltip = "Click to edit";
