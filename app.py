@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request, send_from_directory
 import os
 import sqlite3
 from db import get_db, init_db, import_from_excel_if_empty
-from pricing import get_price, get_live_prices, get_fx_rate, get_timeframe_prices, get_daily_history
+from pricing import get_price, get_live_prices, get_fx_rate, get_timeframe_prices, get_daily_history, get_benchmark_data
 import pandas as pd
 from datetime import datetime, timedelta
 
@@ -299,6 +299,9 @@ def api_portfolio():
             daily_performance["assets"][a['name']].append(round(d_pnl, 2))
             daily_performance["invested"][a['name']].append(round(inv_day, 2))
 
+    # BENCHMARK COMPARISON CALCULATION
+    benchmark_data = get_benchmark_data(months, portfolio_contributions, portfolio_valuations)
+
     conn.close()
     return jsonify({
         "months": months, 
@@ -322,7 +325,8 @@ def api_portfolio():
         "stats": stats,
         "asset_stats": asset_stats,
         "timeframe_stats": timeframe_stats,
-        "daily_performance": daily_performance
+        "daily_performance": daily_performance,
+        "benchmark_data": benchmark_data
     })
 
 

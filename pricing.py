@@ -344,3 +344,120 @@ def get_timeframe_prices(tickers, ticker_configs=None):
                 results[ticker][label] = None
         
     return results
+
+
+def get_benchmark_data(months, portfolio_contributions, portfolio_valuations):
+    """
+    Computes monthly comparison between Portfolio and S&P500, MSCI World, Nasdaq 100.
+    1. Isolated Monthly Growth % (TWR per month)
+    2. Simulated Cumulative Value (€) if total monthly contributions had been invested 100% in each index.
+    """
+    if not months:
+        return {}
+
+    benchmarks_config = {
+        'sp500': {'ticker': '0P00000G12.F', 'name': 'S&P 500'},
+        'msci': {'ticker': '0P0001CLDK.F', 'name': 'MSCI World'},
+        'nasdaq': {'ticker': 'XNAS.DE', 'name': 'Nasdaq 100'}
+    }
+
+    tickers = [b['ticker'] for b in benchmarks_config.values()]
+
+    # Fetch daily close data starting prior to the first month
+    first_date = months[0]['date_end']
+    from datetime import datetime, timedelta
+    start_dt = (datetime.strptime(first_date, '%Y-%m-%d') - timedelta(days=65)).strftime('%Y-%m-%d')
+
+    try:
+        data = yf.download(tickers, start=start_dt, interval="1d", auto_adjust=False, progress=False)
+        if data.empty or 'Close' not in data:
+            return {}
+        close_df = data['Close']
+        if isinstance(close_df, pd.Series):
+            close_df = close_df.to_frame()
+    except Exception:
+        return {}
+
+    # Helper to get price on or before date
+    def get_price_at(ticker, date_str):
+        if ticker not in close_df.columns:
+            return None
+        s = close_df[ticker].dropna()
+        dt = pd.to_datetime(date_str)
+        valid = s[s.index <= dt]
+        if not valid.empty:
+            return float(valid.iloc[-1])
+        return None
+
+    # Calculate portfolio monthly isolated % return
+    # PnL_m = V_m - V_{m-1} - C_m
+    # Ret_m = PnL_m / (V_{m-1} + C_m) if (V_{m-1} + C_m) > 0 else 0
+    portfolio_monthly_pct = []
+    for i in range(len(months)):
+        v_curr = portfolio_valuations[i] if i < len(portfolio_valuations) else 0.0
+        v_prev = portfolio_valuations[i-1] if i > 0 and (i-1) < len(portfolio_valuations) else 0.0
+        c_curr = portfolio_contributions[i] if i < len(portfolio_contributions) else 0.0
+
+        pnl = v_curr - v_prev - c_curr
+        denom = v_prev + c_curr
+        pct = (pnl / denom * 100.0) if denom > 0 else 0.0
+        portfolio_monthly_pct.append(round(pct, 2))
+
+    # Compute benchmarks performance
+    benchmark_monthly_pct = {k: [] for k in benchmarks_config.keys()}
+    benchmark_cumulative_sim = {k: [] for k in benchmarks_config.keys()}
+
+    # Initialize simulated units held for each benchmark
+    benchmark_units = {k: 0.0 for k in benchmarks_config.keys()}
+
+    for i, m in enumerate(months):
+        date_curr = m['date_end']
+        contrib = portfolio_contributions[i] if i < len(portfolio_contributions) else 0.0
+
+        # Prior month date (or ~30 days prior for first month baseline)
+        if i == 0:
+            date_prev = (datetime.strptime(date_curr, '%Y-%m-%d') - timedelta(days=30)).strftime('%Y-%m-%d')
+        else:
+            date_prev = months[i-1]['date_end']
+
+        for key, info in benchmarks_config.items():
+            t = info['ticker']
+            p_curr = get_price_at(t, date_curr)
+            p_prev = get_price_at(t, date_prev)
+
+            # Monthly % return
+            if p_curr and p_prev and p_prev > 0:
+                m_pct = ((p_curr - p_prev) / p_prev) * 100.0
+            else:
+                m_pct = 0.0
+            benchmark_monthly_pct[key].append(round(m_pct, 2))
+
+            # Cumulative simulated portfolio calculation
+            # Buy benchmark units with current contribution at p_curr (or p_prev fallback)
+            p_buy = p_curr or p_prev
+            if p_buy and p_buy > 0 and contrib > 0:
+                benchmark_units[key] += (contrib / p_buy)
+
+            sim_val = benchmark_units[key] * (p_curr or 0.0)
+            benchmark_cumulative_sim[key].append(round(sim_val, 2))
+
+    return {
+        "portfolio_monthly_pct": portfolio_monthly_pct,
+        "benchmarks": {
+            "sp500": {
+                "name": benchmarks_config['sp500']['name'],
+                "monthly_pct": benchmark_monthly_pct['sp500'],
+                "cumulative_sim": benchmark_cumulative_sim['sp500']
+            },
+            "msci": {
+                "name": benchmarks_config['msci']['name'],
+                "monthly_pct": benchmark_monthly_pct['msci'],
+                "cumulative_sim": benchmark_cumulative_sim['msci']
+            },
+            "nasdaq": {
+                "name": benchmarks_config['nasdaq']['name'],
+                "monthly_pct": benchmark_monthly_pct['nasdaq'],
+                "cumulative_sim": benchmark_cumulative_sim['nasdaq']
+            }
+        }
+    }

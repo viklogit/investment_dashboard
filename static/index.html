@@ -162,6 +162,7 @@
     <button class="tab" onclick="switchTab('valuations')">Valuations (Market Value)</button>
     <button class="tab" onclick="switchTab('prices')">Asset Prices</button>
     <button class="tab" onclick="switchTab('pnl')">Monthly PnL</button>
+    <button class="tab" onclick="switchTab('benchmarks')">Benchmark Comparison</button>
     <button class="tab" onclick="switchTab('assets')">Manage Assets</button>
   </div>
 
@@ -293,6 +294,42 @@
     <div class="card">
       <div class="card-header"><span class="card-title">True Monthly PnL</span></div>
       <div class="card-body table-wrap" id="pnl-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- BENCHMARKS -->
+  <div class="section" id="section-benchmarks">
+    <div class="charts-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 20px;">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Monthly Growth Comparison (%)</span>
+          <span style="font-size:12px;color:var(--muted)">Isolated MoM % return vs indices</span>
+        </div>
+        <div class="card-body"><div class="chart-wrap" style="height:320px"><canvas id="benchmarkMonthlyChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Simulated Cumulative Investment (€)</span>
+          <span style="font-size:12px;color:var(--muted)">Value if 100% invested in benchmark</span>
+        </div>
+        <div class="card-body"><div class="chart-wrap" style="height:320px"><canvas id="benchmarkCumulativeChart"></canvas></div></div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Monthly Isolated Growth Comparison Table (%)</span>
+        <span style="font-size:12px;color:var(--muted)">Month-by-month return % of your portfolio vs S&P 500, MSCI World, and Nasdaq 100</span>
+      </div>
+      <div class="card-body table-wrap" id="benchmark-monthly-table-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Simulated Cumulative Value Comparison Table (€)</span>
+        <span style="font-size:12px;color:var(--muted)">Portfolio valuation vs 100% Benchmark allocation strategy</span>
+      </div>
+      <div class="card-body table-wrap" id="benchmark-cumulative-table-wrap"></div>
     </div>
   </div>
 
@@ -613,8 +650,12 @@ function numSign(n) { return n > 0 ? '+' : ''; }
 function switchTab(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('section-' + name).classList.add('active');
-  event.target.classList.add('active');
+  const target = document.getElementById('section-' + name);
+  if (target) target.classList.add('active');
+  if (event && event.target) event.target.classList.add('active');
+  if (name === 'benchmarks') {
+    renderBenchmarkComparison();
+  }
 }
 
 function renderAll() {
@@ -643,7 +684,114 @@ function renderAll() {
   renderValuations();
   renderPrices();
   renderPnL();
+  renderBenchmarkComparison();
   renderAssetsTable();
+}
+
+function renderBenchmarkComparison() {
+  if (!STATE.benchmark_data || !STATE.benchmark_data.benchmarks) return;
+
+  const data = STATE.benchmark_data;
+  const monthLabels = STATE.months.map(m => m.label);
+  const bench = data.benchmarks;
+
+  // 1. Render Monthly Growth Chart (%)
+  if (charts.benchmarkMonthly) charts.benchmarkMonthly.destroy();
+  const ctxMonthly = document.getElementById('benchmarkMonthlyChart').getContext('2d');
+  charts.benchmarkMonthly = new Chart(ctxMonthly, {
+    type: 'line',
+    data: {
+      labels: monthLabels,
+      datasets: [
+        { label: 'My Portfolio', data: data.portfolio_monthly_pct, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
+        { label: 'S&P 500', data: bench.sp500.monthly_pct, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
+        { label: 'MSCI World', data: bench.msci.monthly_pct, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
+        { label: 'Nasdaq 100', data: bench.nasdaq.monthly_pct, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { ticks: { callback: v => v + '%' } }
+      }
+    }
+  });
+
+  // 2. Render Cumulative Simulated Chart (€)
+  if (charts.benchmarkCumulative) charts.benchmarkCumulative.destroy();
+  const ctxCum = document.getElementById('benchmarkCumulativeChart').getContext('2d');
+  charts.benchmarkCumulative = new Chart(ctxCum, {
+    type: 'line',
+    data: {
+      labels: monthLabels,
+      datasets: [
+        { label: 'My Portfolio', data: STATE.portfolio.valuations, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
+        { label: 'S&P 500 (100%)', data: bench.sp500.cumulative_sim, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
+        { label: 'MSCI World (100%)', data: bench.msci.cumulative_sim, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
+        { label: 'Nasdaq 100 (100%)', data: bench.nasdaq.cumulative_sim, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { ticks: { callback: v => '€' + (v >= 1000 ? (v/1000).toFixed(1) + 'k' : v) } }
+      }
+    }
+  });
+
+  // 3. Render Monthly Growth Table (%)
+  let htmlMonthly = `<table><thead><tr>
+    <th style="text-align:left; padding-left:22px">Strategy / Benchmark</th>`;
+  monthLabels.forEach(m => { htmlMonthly += `<th style="text-align:right">${m}</th>`; });
+  htmlMonthly += `</tr></thead><tbody>`;
+
+  const rowsMonthly = [
+    { name: 'My Portfolio', data: data.portfolio_monthly_pct, isPort: true },
+    { name: bench.sp500.name, data: bench.sp500.monthly_pct },
+    { name: bench.msci.name, data: bench.msci.monthly_pct },
+    { name: bench.nasdaq.name, data: bench.nasdaq.monthly_pct }
+  ];
+
+  rowsMonthly.forEach(r => {
+    htmlMonthly += `<tr class="${r.isPort ? 'total-row' : ''}">
+      <td style="text-align:left; padding-left:22px"><strong>${r.name}</strong></td>`;
+    r.data.forEach(v => {
+      const cls = numClass(v);
+      const sign = numSign(v);
+      htmlMonthly += `<td class="${cls}">${v != null ? sign + v.toFixed(2) + '%' : '—'}</td>`;
+    });
+    htmlMonthly += `</tr>`;
+  });
+  htmlMonthly += `</tbody></table>`;
+  document.getElementById('benchmark-monthly-table-wrap').innerHTML = htmlMonthly;
+
+  // 4. Render Cumulative Value Table (€)
+  let htmlCum = `<table><thead><tr>
+    <th style="text-align:left; padding-left:22px">Strategy / Benchmark</th>`;
+  monthLabels.forEach(m => { htmlCum += `<th style="text-align:right">${m}</th>`; });
+  htmlCum += `</tr></thead><tbody>`;
+
+  const rowsCum = [
+    { name: 'My Portfolio', data: STATE.portfolio.valuations, isPort: true },
+    { name: bench.sp500.name + ' (100%)', data: bench.sp500.cumulative_sim },
+    { name: bench.msci.name + ' (100%)', data: bench.msci.cumulative_sim },
+    { name: bench.nasdaq.name + ' (100%)', data: bench.nasdaq.cumulative_sim }
+  ];
+
+  rowsCum.forEach(r => {
+    htmlCum += `<tr class="${r.isPort ? 'total-row' : ''}">
+      <td style="text-align:left; padding-left:22px"><strong>${r.name}</strong></td>`;
+    r.data.forEach(v => {
+      htmlCum += `<td>${fmt(v)}</td>`;
+    });
+    htmlCum += `</tr>`;
+  });
+  htmlCum += `</tbody></table>`;
+  document.getElementById('benchmark-cumulative-table-wrap').innerHTML = htmlCum;
 }
 
 function renderAssetStats() {
