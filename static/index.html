@@ -856,6 +856,11 @@ function renderBenchmarkComparison() {
   ];
 
   rowsCum.forEach(r => {
+    htmlCum += `<tr class="${r.isPort ? 'total-row' : ''}">
+      <td style="text-align:left; padding-left:22px"><strong>${r.name}</strong></td>`;
+    r.data.forEach(v => {
+      htmlCum += `<td>${fmt(v)}</td>`;
+    });
     htmlCum += `</tr>`;
   });
   htmlCum += `</tbody></table>`;
