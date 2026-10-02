@@ -346,11 +346,11 @@ def get_timeframe_prices(tickers, ticker_configs=None):
     return results
 
 
-def get_benchmark_data(months, portfolio_contributions, portfolio_valuations):
+def get_benchmark_data(months, portfolio_contributions, portfolio_valuations, start_month_idx=0):
     """
     Computes monthly comparison between Portfolio and S&P500, MSCI World, Nasdaq 100.
     1. Isolated Monthly Growth % (TWR per month)
-    2. Simulated Cumulative Value (€) if total monthly contributions had been invested 100% in each index.
+    2. Simulated Cumulative Value (€) if total monthly contributions had been invested 100% in each index starting from start_month_idx.
     """
     if not months:
         return {}
@@ -410,6 +410,10 @@ def get_benchmark_data(months, portfolio_contributions, portfolio_valuations):
     # Initialize simulated units held for each benchmark
     benchmark_units = {k: 0.0 for k in benchmarks_config.keys()}
 
+    # We also compute simulated portfolio value for My Portfolio from start_month_idx if user filters
+    # If start_month_idx > 0, portfolio_cumulative_sim starts from initial valuation at start_month_idx or 0
+    start_val = portfolio_valuations[start_month_idx-1] if start_month_idx > 0 and (start_month_idx-1) < len(portfolio_valuations) else 0.0
+
     for i, m in enumerate(months):
         date_curr = m['date_end']
         contrib = portfolio_contributions[i] if i < len(portfolio_contributions) else 0.0
@@ -432,13 +436,20 @@ def get_benchmark_data(months, portfolio_contributions, portfolio_valuations):
                 m_pct = 0.0
             benchmark_monthly_pct[key].append(round(m_pct, 2))
 
-            # Cumulative simulated portfolio calculation
-            # Buy benchmark units with current contribution at p_curr (or p_prev fallback)
+            # Cumulative simulated portfolio calculation starting from start_month_idx
             p_buy = p_curr or p_prev
-            if p_buy and p_buy > 0 and contrib > 0:
-                benchmark_units[key] += (contrib / p_buy)
+            if i >= start_month_idx:
+                # If first month of filter and we want to include initial starting valuation:
+                if i == start_month_idx and start_val > 0 and p_buy and p_buy > 0:
+                    benchmark_units[key] += (start_val / p_buy)
+                
+                if p_buy and p_buy > 0 and contrib > 0:
+                    benchmark_units[key] += (contrib / p_buy)
 
-            sim_val = benchmark_units[key] * (p_curr or 0.0)
+                sim_val = benchmark_units[key] * (p_curr or 0.0)
+            else:
+                sim_val = 0.0
+
             benchmark_cumulative_sim[key].append(round(sim_val, 2))
 
     return {

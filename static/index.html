@@ -299,6 +299,16 @@
 
   <!-- BENCHMARKS -->
   <div class="section" id="section-benchmarks">
+    <div class="card" style="margin-bottom:20px; padding:16px 20px; display:flex; align-items:center; justify-space-between; flex-wrap:wrap; gap:16px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:13px; font-weight:600; color:var(--navy)">📅 Start Comparison From:</span>
+        <select class="form-select" id="bm-start-month" onchange="renderBenchmarkComparison()" style="width:auto; padding:6px 12px; font-size:13px; margin:0;">
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+      <span style="font-size:12px; color:var(--muted)">Filters all charts & tables to compare performance starting from the selected strategy start date.</span>
+    </div>
+
     <div class="charts-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 20px;">
       <div class="card">
         <div class="card-header">
@@ -692,8 +702,71 @@ function renderBenchmarkComparison() {
   if (!STATE.benchmark_data || !STATE.benchmark_data.benchmarks) return;
 
   const data = STATE.benchmark_data;
-  const monthLabels = STATE.months.map(m => m.label);
+  const allMonths = STATE.months.map(m => m.label);
   const bench = data.benchmarks;
+
+  // Populate month selector dropdown if empty
+  const selectEl = document.getElementById('bm-start-month');
+  if (selectEl && selectEl.options.length === 0) {
+    let optHtml = `<option value="0">All Time (${allMonths[0] || ''})</option>`;
+    let jan26Idx = -1;
+    allMonths.forEach((m, idx) => {
+      optHtml += `<option value="${idx}">${m}</option>`;
+      if (m.toLowerCase().includes('jan') && (m.includes('26') || m.includes('2026'))) {
+        jan26Idx = idx;
+      }
+    });
+    selectEl.innerHTML = optHtml;
+    if (jan26Idx >= 0) {
+      selectEl.value = jan26Idx.toString();
+    }
+  }
+
+  const startIdx = selectEl ? parseInt(selectEl.value) || 0 : 0;
+  const monthLabels = allMonths.slice(startIdx);
+
+  // Sliced data
+  const portMonthly = data.portfolio_monthly_pct.slice(startIdx);
+  const spMonthly = bench.sp500.monthly_pct.slice(startIdx);
+  const msciMonthly = bench.msci.monthly_pct.slice(startIdx);
+  const nasdaqMonthly = bench.nasdaq.monthly_pct.slice(startIdx);
+
+  // Cumulative simulation sliced & normalized from startIdx
+  const portVals = STATE.portfolio.valuations;
+  const basePortVal = startIdx > 0 ? portVals[startIdx - 1] : 0;
+  const portCum = portVals.slice(startIdx);
+
+  // Re-simulate benchmarks starting from startIdx using contributions
+  const contribs = STATE.portfolio.contributions;
+  const spCumSim = [];
+  const msciCumSim = [];
+  const nasdaqCumSim = [];
+
+  let spUnits = 0, msciUnits = 0, nasdaqUnits = 0;
+  for (let i = startIdx; i < STATE.months.length; i++) {
+    const c = contribs[i] || 0;
+    const spP = bench.sp500.cumulative_sim[i];
+    const msciP = bench.msci.cumulative_sim[i];
+    const nasdaqP = bench.nasdaq.cumulative_sim[i];
+
+    // Get approximate benchmark index values to simulate units
+    const spMult = (1 + (bench.sp500.monthly_pct[i] || 0)/100);
+    const msciMult = (1 + (bench.msci.monthly_pct[i] || 0)/100);
+    const nasdaqMult = (1 + (bench.nasdaq.monthly_pct[i] || 0)/100);
+
+    if (i === startIdx) {
+      spUnits = (basePortVal + c);
+      msciUnits = (basePortVal + c);
+      nasdaqUnits = (basePortVal + c);
+    } else {
+      spUnits = (spUnits * spMult) + c;
+      msciUnits = (msciUnits * msciMult) + c;
+      nasdaqUnits = (nasdaqUnits * nasdaqMult) + c;
+    }
+    spCumSim.push(Math.round(spUnits * 100) / 100);
+    msciCumSim.push(Math.round(msciUnits * 100) / 100);
+    nasdaqCumSim.push(Math.round(nasdaqUnits * 100) / 100);
+  }
 
   // 1. Render Monthly Growth Chart (%)
   if (charts.benchmarkMonthly) charts.benchmarkMonthly.destroy();
@@ -703,10 +776,10 @@ function renderBenchmarkComparison() {
     data: {
       labels: monthLabels,
       datasets: [
-        { label: 'My Portfolio', data: data.portfolio_monthly_pct, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
-        { label: 'S&P 500', data: bench.sp500.monthly_pct, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
-        { label: 'MSCI World', data: bench.msci.monthly_pct, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
-        { label: 'Nasdaq 100', data: bench.nasdaq.monthly_pct, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
+        { label: 'My Portfolio', data: portMonthly, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
+        { label: 'S&P 500', data: spMonthly, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
+        { label: 'MSCI World', data: msciMonthly, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
+        { label: 'Nasdaq 100', data: nasdaqMonthly, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
       ]
     },
     options: {
@@ -727,10 +800,10 @@ function renderBenchmarkComparison() {
     data: {
       labels: monthLabels,
       datasets: [
-        { label: 'My Portfolio', data: STATE.portfolio.valuations, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
-        { label: 'S&P 500 (100%)', data: bench.sp500.cumulative_sim, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
-        { label: 'MSCI World (100%)', data: bench.msci.cumulative_sim, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
-        { label: 'Nasdaq 100 (100%)', data: bench.nasdaq.cumulative_sim, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
+        { label: 'My Portfolio', data: portCum, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.2 },
+        { label: 'S&P 500 (100%)', data: spCumSim, borderColor: '#F4B942', borderWidth: 2, tension: 0.2 },
+        { label: 'MSCI World (100%)', data: msciCumSim, borderColor: '#3B82F6', borderWidth: 2, tension: 0.2 },
+        { label: 'Nasdaq 100 (100%)', data: nasdaqCumSim, borderColor: '#EF4444', borderWidth: 2, tension: 0.2 }
       ]
     },
     options: {
@@ -750,10 +823,10 @@ function renderBenchmarkComparison() {
   htmlMonthly += `</tr></thead><tbody>`;
 
   const rowsMonthly = [
-    { name: 'My Portfolio', data: data.portfolio_monthly_pct, isPort: true },
-    { name: bench.sp500.name, data: bench.sp500.monthly_pct },
-    { name: bench.msci.name, data: bench.msci.monthly_pct },
-    { name: bench.nasdaq.name, data: bench.nasdaq.monthly_pct }
+    { name: 'My Portfolio', data: portMonthly, isPort: true },
+    { name: bench.sp500.name, data: spMonthly },
+    { name: bench.msci.name, data: msciMonthly },
+    { name: bench.nasdaq.name, data: nasdaqMonthly }
   ];
 
   rowsMonthly.forEach(r => {
@@ -776,18 +849,13 @@ function renderBenchmarkComparison() {
   htmlCum += `</tr></thead><tbody>`;
 
   const rowsCum = [
-    { name: 'My Portfolio', data: STATE.portfolio.valuations, isPort: true },
-    { name: bench.sp500.name + ' (100%)', data: bench.sp500.cumulative_sim },
-    { name: bench.msci.name + ' (100%)', data: bench.msci.cumulative_sim },
-    { name: bench.nasdaq.name + ' (100%)', data: bench.nasdaq.cumulative_sim }
+    { name: 'My Portfolio', data: portCum, isPort: true },
+    { name: bench.sp500.name + ' (100%)', data: spCumSim },
+    { name: bench.msci.name + ' (100%)', data: msciCumSim },
+    { name: bench.nasdaq.name + ' (100%)', data: nasdaqCumSim }
   ];
 
   rowsCum.forEach(r => {
-    htmlCum += `<tr class="${r.isPort ? 'total-row' : ''}">
-      <td style="text-align:left; padding-left:22px"><strong>${r.name}</strong></td>`;
-    r.data.forEach(v => {
-      htmlCum += `<td>${fmt(v)}</td>`;
-    });
     htmlCum += `</tr>`;
   });
   htmlCum += `</tbody></table>`;

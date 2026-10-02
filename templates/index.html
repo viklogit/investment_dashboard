@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Investment Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:      #0d0d14;
+  --surface: #13131f;
+  --card:    #191926;
+  --border:  #252535;
+  --accent:  #e94560;
+  --accent2: #7c6af5;
+  --accent3: #2ec4b6;
+  --text:    #e8e8f0;
+  --muted:   #6b6b8a;
+  --gain:    #2ec4b6;
+  --loss:    #e94560;
+  --etf:     #7c6af5;
+  --stock:   #e9a840;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+/* ── Layout ── */
+.app { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px; min-width: 220px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 28px 0;
+  position: fixed; top: 0; left: 0; height: 100vh;
+  z-index: 100;
+}
+.main { margin-left: 220px; flex: 1; padding: 32px 36px; }
+.logo {
+  font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+  padding: 0 24px 28px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.logo span { color: var(--accent); }
+.nav { padding: 20px 12px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 14px; font-weight: 600;
+  color: var(--muted); transition: all .2s;
+  margin-bottom: 4px;
+}
+.nav-item:hover { background: var(--card); color: var(--text); }
+.nav-item.active { background: var(--accent); color: #fff; }
+.nav-icon { font-size: 16px; }
+.sidebar-actions { padding: 16px 12px; border-top: 1px solid var(--border); }
+/* ── Header ── */
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 28px;
+}
+.page-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+.page-title span { color: var(--accent); }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+/* ── Buttons ── */
+.btn {
+  padding: 9px 18px; border-radius: 8px; border: none;
+  cursor: pointer; font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 700; transition: all .15s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #cf3250; transform: translateY(-1px); }
+.btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: var(--border); }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-danger { background: transparent; color: var(--loss); border: 1px solid var(--border); }
+.btn-danger:hover { background: var(--loss); color: #fff; }
+/* ── KPI Cards ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 28px;
+}
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px 22px;
+  position: relative; overflow: hidden;
+}
+.kpi-card::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+}
+.kpi-card.accent::before  { background: var(--accent); }
+.kpi-card.accent2::before { background: var(--accent2); }
+.kpi-card.accent3::before { background: var(--accent3); }
+.kpi-card.yellow::before  { background: var(--stock); }
+.kpi-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+.kpi-value { font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 500; letter-spacing: -1px; }
+.kpi-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-family: 'DM Mono', monospace; }
+.kpi-sub.gain { color: var(--gain); }
+.kpi-sub.loss { color: var(--loss); }
+/* ── Charts Row ── */
+.charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 28px; }
+.chart-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px;
+}
+.chart-title { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 18px; }
+.chart-wrap { position: relative; }
+/* ── Table ── */
+.table-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+}
+.table-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: 1px solid var(--border);
+}
+.table-title { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+.table-controls { display: flex; gap: 8px; align-items: center; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-family: 'DM Mono', monospace; font-size: 12px; }
+thead th {
+  background: var(--surface); padding: 10px 14px;
+  text-align: right; font-weight: 500; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap; position: sticky; top: 0;
+}
+thead th:first-child { text-align: left; }
+thead th:nth-child(2) { text-align: center; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:hover { background: rgba(124,106,245,.05); }
+tbody td { padding: 10px 14px; text-align: right; white-space: nowrap; }
+tbody td:first-child { text-align: left; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; }
+tbody td:nth-child(2) { text-align: center; }
+tfoot td { background: var(--surface); font-weight: 700; padding: 10px 14px; text-align: right; border-top: 2px solid var(--border); }
+tfoot td:first-child { text-align: left; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; font-family: 'Syne', sans-serif;
+}
+.badge-etf   { background: rgba(124,106,245,.2); color: var(--etf); }
+.badge-stock { background: rgba(233,168,64,.2);  color: var(--stock); }
+.cell-input {
+  background: transparent; border: none; outline: none;
+  font-family: 'DM Mono', monospace; font-size: 12px;
+  color: var(--text); text-align: right; width: 90px;
+  padding: 2px 4px; border-radius: 4px; cursor: pointer;
+}
+.cell-input:focus { background: rgba(124,106,245,.15); cursor: text; }
+.cell-empty { color: var(--muted); }
+.col-total { color: var(--accent2); font-weight: 700; }
+.row-total { color: var(--accent3); font-weight: 700; }
+/* ── MoM delta row ── */
+.delta-positive { color: var(--gain); }
+.delta-negative { color: var(--loss); }
+/* ── Month header with delete ── */
+.month-th { cursor: default; }
+.month-th .del-month { opacity: 0; font-size: 9px; margin-left: 4px; cursor: pointer; color: var(--loss); }
+.month-th:hover .del-month { opacity: 1; }
+/* ── Modal ── */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.6); z-index: 500;
+  align-items: center; justify-content: center;
+}
+.overlay.open { display: flex; }
+.modal {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px; width: 380px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.modal h3 { font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+.modal label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.modal input, .modal select {
+  width: 100%; padding: 10px 14px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Syne', sans-serif; font-size: 14px;
+  margin-bottom: 16px; outline: none;
+}
+.modal input:focus, .modal select:focus { border-color: var(--accent2); }
+.modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+/* ── Upload ── */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 12px;
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: border-color .2s; color: var(--muted); font-size: 13px;
+}
+.upload-zone:hover { border-color: var(--accent2); color: var(--text); }
+/* ── View tabs ── */
+.view-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+.view-tab {
+  padding: 7px 16px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  border: 1px solid transparent; transition: all .15s;
+}
+.view-tab:hover { color: var(--text); }
+.view-tab.active { border-color: var(--accent2); color: var(--accent2); background: rgba(124,106,245,.1); }
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 18px; font-size: 13px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.4); z-index: 1000;
+  transform: translateY(80px); opacity: 0;
+  transition: all .25s; pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok   { border-left: 3px solid var(--gain); }
+.toast.err  { border-left: 3px solid var(--loss); }
+/* ── Loading ── */
+.loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">invest<span>.</span>track</div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="showView('overview')">
+        <span class="nav-icon">📊</span> Overview
+      </div>
+      <div class="nav-item" onclick="showView('table')">
+        <span class="nav-icon">📋</span> Data Table
+      </div>
+      <div class="nav-item" onclick="showView('gains')">
+        <span class="nav-icon">📈</span> Gains & Flow
+      </div>
+      <div class="nav-item" onclick="showView('benchmarks')">
+        <span class="nav-icon">⚖️</span> Benchmark Comparison
+      </div>
+    </nav>
+    <div class="sidebar-actions">
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="openUpload()">⬆ Upload Excel</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="downloadExcel()">⬇ Download Excel</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- OVERVIEW -->
+    <section id="view-overview">
+      <div class="page-header">
+        <div class="page-title">Portfolio <span>Overview</span></div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="openAddMonth()">+ Month</button>
+          <button class="btn btn-primary" onclick="openAddInvestment()">+ Investment</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="kpi-grid"><div class="loading">Loading…</div></div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Cumulative Portfolio Growth</div>
+          <div class="chart-wrap"><canvas id="chart-growth" height="220"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Allocation by Asset</div>
+          <div class="chart-wrap"><canvas id="chart-donut" height="220"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-card" style="margin-bottom:0">
+        <div class="chart-title">Monthly Contributions (Stacked)</div>
+        <div class="chart-wrap"><canvas id="chart-stacked" height="180"></canvas></div>
+      </div>
+    </section>
+
+    <!-- TABLE -->
+    <section id="view-table" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Data <span>Table</span></div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="openAddMonth()">+ Month</button>
+          <button class="btn btn-primary" onclick="openAddInvestment()">+ Investment</button>
+        </div>
+      </div>
+      <div class="view-tabs">
+        <div class="view-tab active" onclick="setTableMode('monthly',this)">Monthly</div>
+        <div class="view-tab" onclick="setTableMode('cumulative',this)">Cumulative</div>
+      </div>
+      <div class="table-card" id="table-container"><div class="loading">Loading…</div></div>
+    </section>
+
+    <!-- GAINS -->
+    <section id="view-gains" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Gains <span>&amp; Flow</span></div>
+      </div>
+      <div class="kpi-grid" id="gains-kpi"><div class="loading">Loading…</div></div>
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-title">Month-over-Month Change (€)</div>
+        <div class="chart-wrap"><canvas id="chart-mom" height="200"></canvas></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">MoM Delta by Investment</div></div>
+        <div class="table-wrap" id="gains-table"><div class="loading">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- BENCHMARKS -->
+    <section id="view-benchmarks" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Benchmark <span>Comparison</span></div>
+        <div class="header-actions" style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:13px; font-weight:600; color:var(--muted);">Start From:</span>
+          <select id="bm-start-month" onchange="renderBenchmarkCharts(); renderBenchmarkTables();" style="padding:6px 12px; border-radius:8px; background:var(--card); border:1px solid var(--border); color:var(--text); font-family:'Syne',sans-serif; font-size:13px; outline:none;">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Monthly Isolated Return Comparison (%)</div>
+          <div class="chart-wrap"><canvas id="chart-bm-monthly" height="220"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Simulated Portfolio Growth (€)</div>
+          <div class="chart-wrap"><canvas id="chart-bm-cum" height="220"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card" style="margin-bottom:20px">
+        <div class="table-header"><div class="table-title">Monthly Isolated Growth Comparison (%)</div></div>
+        <div class="table-wrap" id="bm-monthly-table"><div class="loading">Loading…</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Simulated Cumulative Portfolio (€)</div></div>
+        <div class="table-wrap" id="bm-cum-table"><div class="loading">Loading…</div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Modals -->
+<div class="overlay" id="overlay-month">
+  <div class="modal">
+    <h3>Add Month</h3>
+    <label>Month Label (e.g. Apr 25)</label>
+    <input id="input-month" placeholder="Apr 25" maxlength="10"/>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddMonth()">Add Month</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-investment">
+  <div class="modal">
+    <h3>Add Investment</h3>
+    <label>Name</label>
+    <input id="input-inv-name" placeholder="e.g. MSCI World"/>
+    <label>Type</label>
+    <select id="input-inv-type">
+      <option value="ETF">ETF</option>
+      <option value="Stock">Stock</option>
+    </select>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddInvestment()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-upload">
+  <div class="modal">
+    <h3>Upload Excel File</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Your Excel must have a sheet named <strong style="color:var(--text)">Data</strong> with:<br>
+      Column A = Investment name, Column B = Type, Column C+ = months.
+    </p>
+    <label class="upload-zone" for="file-input">
+      <div style="font-size:28px;margin-bottom:8px">📂</div>
+      Click to select .xlsx file
+    </label>
+    <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFileUpload(this)"/>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let DATA = { months: [], investments: [] };
+let tableMode = 'monthly';
+let chartGrowth, chartDonut, chartStacked, chartMoM, chartBmMonthly, chartBmCum;
+
+const PALETTE = [
+  '#7c6af5','#e94560','#2ec4b6','#e9a840',
+  '#f72585','#4361ee','#06d6a0','#fb8500',
+  '#8338ec','#3a86ff','#ff006e','#ffbe0b'
+];
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  const res = await fetch('/api/data');
+  DATA = await res.json();
+  try {
+    const resP = await fetch('/api/portfolio');
+    const dataP = await resP.json();
+    DATA.benchmark_data = dataP.benchmark_data;
+    DATA.portfolio_valuations = dataP.portfolio ? dataP.portfolio.valuations : [];
+  } catch(e) {}
+  renderAll();
+}
+
+function renderAll() {
+  renderKPIs();
+  renderGainsKPIs();
+  renderCharts();
+  renderTable();
+  renderGainsTable();
+  renderBenchmarkCharts();
+  renderBenchmarkTables();
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKPIs() {
+  const { months, investments } = DATA;
+  if (!months.length) return;
+
+  const totalInvested = investments.reduce((s, inv) => s + inv.monthly.reduce((a,b)=>a+b,0), 0);
+  const lastMonthIdx  = months.length - 1;
+  const prevMonthIdx  = months.length - 2;
+
+  const lastMonth = investments.reduce((s, inv) => s + (inv.monthly[lastMonthIdx]||0), 0);
+  const prevMonth = prevMonthIdx >= 0
+    ? investments.reduce((s, inv) => s + (inv.monthly[prevMonthIdx]||0), 0)
+    : 0;
+  const mom = prevMonth > 0 ? ((lastMonth - prevMonth)/prevMonth*100) : 0;
+
+  const etfTotal   = investments.filter(i=>i.type==='ETF').reduce((s,i)=>s+i.monthly.reduce((a,b)=>a+b,0),0);
+  const stockTotal = investments.filter(i=>i.type==='Stock').reduce((s,i)=>s+i.monthly.reduce((a,b)=>a+b,0),0);
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi-card accent">
+      <div class="kpi-label">Total Invested</div>
+      <div class="kpi-value">${fmt(totalInvested)}</div>
+      <div class="kpi-sub">${months.length} months tracked</div>
+    </div>
+    <div class="kpi-card accent2">
+      <div class="kpi-label">Last Month</div>
+      <div class="kpi-value">${fmt(lastMonth)}</div>
+      <div class="kpi-sub ${mom>=0?'gain':'loss'}">${mom>=0?'▲':'▼'} ${Math.abs(mom).toFixed(1)}% vs prev month</div>
+    </div>
+    <div class="kpi-card accent3">
+      <div class="kpi-label">ETFs</div>
+      <div class="kpi-value">${fmt(etfTotal)}</div>
+      <div class="kpi-sub">${totalInvested>0?(etfTotal/totalInvested*100).toFixed(1):0}% of portfolio</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Stocks</div>
+      <div class="kpi-value">${fmt(stockTotal)}</div>
+      <div class="kpi-sub">${totalInvested>0?(stockTotal/totalInvested*100).toFixed(1):0}% of portfolio</div>
+    </div>`;
+}
+
+function renderGainsKPIs() {
+  const { months, investments } = DATA;
+  if (!months.length) return;
+
+  // Cumulative per month
+  const cumByMonth = months.map((_,mi) =>
+    investments.reduce((s,inv)=>s+(inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0)),0)
+  );
+  const peaks = cumByMonth.map((_,i)=>Math.max(...cumByMonth.slice(0,i+1)));
+  const bestMonth = months[cumByMonth.indexOf(Math.max(...cumByMonth))];
+  const avgMonthly = cumByMonth.length > 1
+    ? (cumByMonth[cumByMonth.length-1] - cumByMonth[0]) / (cumByMonth.length-1)
+    : cumByMonth[0];
+
+  const momChanges = cumByMonth.map((v,i)=> i===0 ? 0 : v - cumByMonth[i-1]);
+  const bestMoM  = Math.max(...momChanges.slice(1));
+  const worstMoM = Math.min(...momChanges.slice(1));
+
+  document.getElementById('gains-kpi').innerHTML = `
+    <div class="kpi-card accent">
+      <div class="kpi-label">Portfolio Total</div>
+      <div class="kpi-value">${fmt(cumByMonth[cumByMonth.length-1])}</div>
+      <div class="kpi-sub">all time invested</div>
+    </div>
+    <div class="kpi-card accent2">
+      <div class="kpi-label">Avg Monthly Add</div>
+      <div class="kpi-value">${fmt(avgMonthly)}</div>
+      <div class="kpi-sub">per month average</div>
+    </div>
+    <div class="kpi-card accent3">
+      <div class="kpi-label">Best Month</div>
+      <div class="kpi-value">${fmt(bestMoM)}</div>
+      <div class="kpi-sub gain">▲ highest single month</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Lowest Month</div>
+      <div class="kpi-value">${fmt(worstMoM)}</div>
+      <div class="kpi-sub ${worstMoM<0?'loss':'gain'}">${worstMoM<0?'▼':'–'} lowest investment</div>
+    </div>`;
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+const chartOpts = (type='line') => ({
+  responsive: true,
+  plugins: { legend: { labels: { color: '#6b6b8a', font: { family: 'DM Mono', size: 11 }, boxWidth: 12 } } },
+  scales: type !== 'doughnut' ? {
+    x: { ticks: { color: '#6b6b8a', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e1e30' } },
+    y: { ticks: { color: '#6b6b8a', font: { family: 'DM Mono', size: 10 }, callback: v => '€'+v.toLocaleString() }, grid: { color: '#1e1e30' } }
+  } : {}
+});
+
+function renderCharts() {
+  const { months, investments } = DATA;
+  if (!months.length) return;
+
+  // Cumulative growth
+  const cumData = investments.map((inv, idx) => ({
+    label: inv.name,
+    data: months.map((_,mi) => inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0)),
+    borderColor: PALETTE[idx % PALETTE.length],
+    backgroundColor: PALETTE[idx % PALETTE.length]+'22',
+    fill: false, tension: .4, pointRadius: 2
+  }));
+  // Total line
+  const totalCum = months.map((_,mi) =>
+    investments.reduce((s,inv)=>s+inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0),0)
+  );
+  cumData.unshift({ label: 'TOTAL', data: totalCum, borderColor: '#e94560', backgroundColor: '#e9456020', borderWidth: 2.5, fill: true, tension: .4, pointRadius: 3 });
+
+  if (chartGrowth) chartGrowth.destroy();
+  chartGrowth = new Chart(document.getElementById('chart-growth').getContext('2d'), {
+    type: 'line', data: { labels: months, datasets: cumData }, options: chartOpts('line')
+  });
+
+  // Donut
+  const totals = investments.map(inv => inv.monthly.reduce((a,b)=>a+b,0));
+  if (chartDonut) chartDonut.destroy();
+  chartDonut = new Chart(document.getElementById('chart-donut').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: investments.map(i=>i.name),
+      datasets: [{ data: totals, backgroundColor: PALETTE.slice(0, investments.length), borderColor: '#191926', borderWidth: 2 }]
+    },
+    options: { ...chartOpts('doughnut'), cutout: '65%' }
+  });
+
+  // Stacked bar
+  if (chartStacked) chartStacked.destroy();
+  chartStacked = new Chart(document.getElementById('chart-stacked').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: investments.map((inv,idx) => ({
+        label: inv.name,
+        data: inv.monthly,
+        backgroundColor: PALETTE[idx % PALETTE.length]+'cc',
+        borderRadius: 2
+      }))
+    },
+    options: { ...chartOpts('bar'), scales: { ...chartOpts('bar').scales, x: { ...chartOpts('bar').scales?.x, stacked: true }, y: { ...chartOpts('bar').scales?.y, stacked: true } } }
+  });
+
+  // MoM chart
+  const totalByMonth = months.map((_,mi) =>
+    investments.reduce((s,inv)=>s+(inv.monthly[mi]||0),0)
+  );
+  const momDelta = totalByMonth.map((v,i)=> i===0 ? 0 : v - totalByMonth[i-1]);
+  if (chartMoM) chartMoM.destroy();
+  const momCanvas = document.getElementById('chart-mom');
+  if (momCanvas) {
+    chartMoM = new Chart(momCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          label: 'MoM Change',
+          data: momDelta,
+          backgroundColor: momDelta.map(v => v >= 0 ? '#2ec4b688' : '#e9456088'),
+          borderColor: momDelta.map(v => v >= 0 ? '#2ec4b6' : '#e94560'),
+          borderWidth: 1, borderRadius: 4
+        }]
+      },
+      options: chartOpts('bar')
+    });
+  }
+}
+
+function renderBenchmarkCharts() {
+  if (!DATA.benchmark_data || !DATA.benchmark_data.benchmarks) return;
+  const { months, benchmark_data } = DATA;
+  const bench = benchmark_data.benchmarks;
+
+  // Populate dropdown
+  const selectEl = document.getElementById('bm-start-month');
+  if (selectEl && selectEl.options.length === 0) {
+    let optHtml = `<option value="0">All Time (${months[0] || ''})</option>`;
+    let jan26Idx = -1;
+    months.forEach((m, idx) => {
+      optHtml += `<option value="${idx}">${m}</option>`;
+      if (m.toLowerCase().includes('jan') && (m.includes('26') || m.includes('2026'))) {
+        jan26Idx = idx;
+      }
+    });
+    selectEl.innerHTML = optHtml;
+    if (jan26Idx >= 0) selectEl.value = jan26Idx.toString();
+  }
+
+  const startIdx = selectEl ? parseInt(selectEl.value) || 0 : 0;
+  const monthLabels = months.slice(startIdx);
+
+  const portMonthly = benchmark_data.portfolio_monthly_pct.slice(startIdx);
+  const spMonthly = bench.sp500.monthly_pct.slice(startIdx);
+  const msciMonthly = bench.msci.monthly_pct.slice(startIdx);
+  const nasdaqMonthly = bench.nasdaq.monthly_pct.slice(startIdx);
+
+  const totalCumVal = months.map((_,mi) => DATA.investments.reduce((s,inv)=>s+inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0),0));
+  const basePortVal = startIdx > 0 ? totalCumVal[startIdx - 1] : 0;
+  const portCum = totalCumVal.slice(startIdx);
+
+  // Re-simulate
+  const contribs = months.map((_,mi) => DATA.investments.reduce((s,inv)=>s+(inv.monthly[mi]||0),0));
+  const spCumSim = [];
+  const msciCumSim = [];
+  const nasdaqCumSim = [];
+
+  let spUnits = 0, msciUnits = 0, nasdaqUnits = 0;
+  for (let i = startIdx; i < months.length; i++) {
+    const c = contribs[i] || 0;
+    const spMult = (1 + (bench.sp500.monthly_pct[i] || 0)/100);
+    const msciMult = (1 + (bench.msci.monthly_pct[i] || 0)/100);
+    const nasdaqMult = (1 + (bench.nasdaq.monthly_pct[i] || 0)/100);
+
+    if (i === startIdx) {
+      spUnits = (basePortVal + c);
+      msciUnits = (basePortVal + c);
+      nasdaqUnits = (basePortVal + c);
+    } else {
+      spUnits = (spUnits * spMult) + c;
+      msciUnits = (msciUnits * msciMult) + c;
+      nasdaqUnits = (nasdaqUnits * nasdaqMult) + c;
+    }
+    spCumSim.push(Math.round(spUnits));
+    msciCumSim.push(Math.round(msciUnits));
+    nasdaqCumSim.push(Math.round(nasdaqUnits));
+  }
+
+  // Monthly Isolated Return % Chart
+  if (chartBmMonthly) chartBmMonthly.destroy();
+  const bmMonthlyCanvas = document.getElementById('chart-bm-monthly');
+  if (bmMonthlyCanvas) {
+    chartBmMonthly = new Chart(bmMonthlyCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [
+          { label: 'My Portfolio', data: portMonthly, borderColor: '#2ec4b6', backgroundColor: '#2ec4b622', borderWidth: 2.5, tension: 0.3 },
+          { label: 'S&P 500', data: spMonthly, borderColor: '#e9a840', borderWidth: 2, tension: 0.3 },
+          { label: 'MSCI World', data: msciMonthly, borderColor: '#7c6af5', borderWidth: 2, tension: 0.3 },
+          { label: 'Nasdaq 100', data: nasdaqMonthly, borderColor: '#e94560', borderWidth: 2, tension: 0.3 }
+        ]
+      },
+      options: { ...chartOpts('line'), scales: { ...chartOpts('line').scales, y: { ...chartOpts('line').scales?.y, ticks: { callback: v => v + '%' } } } }
+    });
+  }
+
+  // Cumulative Simulated Growth (€) Chart
+  if (chartBmCum) chartBmCum.destroy();
+  const bmCumCanvas = document.getElementById('chart-bm-cum');
+  if (bmCumCanvas) {
+    chartBmCum = new Chart(bmCumCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [
+          { label: 'My Portfolio', data: portCum, borderColor: '#2ec4b6', backgroundColor: '#2ec4b622', borderWidth: 2.5, tension: 0.3 },
+          { label: 'S&P 500 (100%)', data: spCumSim, borderColor: '#e9a840', borderWidth: 2, tension: 0.3 },
+          { label: 'MSCI World (100%)', data: msciCumSim, borderColor: '#7c6af5', borderWidth: 2, tension: 0.3 },
+          { label: 'Nasdaq 100 (100%)', data: nasdaqCumSim, borderColor: '#e94560', borderWidth: 2, tension: 0.3 }
+        ]
+      },
+      options: chartOpts('line')
+    });
+  }
+}
+
+function renderBenchmarkTables() {
+  if (!DATA.benchmark_data || !DATA.benchmark_data.benchmarks) return;
+  const { months, benchmark_data } = DATA;
+  const bench = benchmark_data.benchmarks;
+
+  const selectEl = document.getElementById('bm-start-month');
+  const startIdx = selectEl ? parseInt(selectEl.value) || 0 : 0;
+  const monthLabels = months.slice(startIdx);
+
+  const portMonthly = benchmark_data.portfolio_monthly_pct.slice(startIdx);
+  const spMonthly = bench.sp500.monthly_pct.slice(startIdx);
+  const msciMonthly = bench.msci.monthly_pct.slice(startIdx);
+  const nasdaqMonthly = bench.nasdaq.monthly_pct.slice(startIdx);
+
+  const totalCumVal = months.map((_,mi) => DATA.investments.reduce((s,inv)=>s+inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0),0));
+  const basePortVal = startIdx > 0 ? totalCumVal[startIdx - 1] : 0;
+  const portCum = totalCumVal.slice(startIdx);
+
+  const contribs = months.map((_,mi) => DATA.investments.reduce((s,inv)=>s+(inv.monthly[mi]||0),0));
+  const spCumSim = [];
+  const msciCumSim = [];
+  const nasdaqCumSim = [];
+
+  let spUnits = 0, msciUnits = 0, nasdaqUnits = 0;
+  for (let i = startIdx; i < months.length; i++) {
+    const c = contribs[i] || 0;
+    const spMult = (1 + (bench.sp500.monthly_pct[i] || 0)/100);
+    const msciMult = (1 + (bench.msci.monthly_pct[i] || 0)/100);
+    const nasdaqMult = (1 + (bench.nasdaq.monthly_pct[i] || 0)/100);
+
+    if (i === startIdx) {
+      spUnits = (basePortVal + c);
+      msciUnits = (basePortVal + c);
+      nasdaqUnits = (basePortVal + c);
+    } else {
+      spUnits = (spUnits * spMult) + c;
+      msciUnits = (msciUnits * msciMult) + c;
+      nasdaqUnits = (nasdaqUnits * nasdaqMult) + c;
+    }
+    spCumSim.push(Math.round(spUnits));
+    msciCumSim.push(Math.round(msciUnits));
+    nasdaqCumSim.push(Math.round(nasdaqUnits));
+  }
+
+  // Monthly Isolated Return Table
+  let htmlM = `<div class="table-wrap"><table><thead><tr><th>Strategy / Index</th>`;
+  monthLabels.forEach(m => htmlM += `<th>${m}</th>`);
+  htmlM += `</tr></thead><tbody>`;
+
+  const rowsM = [
+    { name: 'My Portfolio', data: portMonthly, isPort: true },
+    { name: bench.sp500.name, data: spMonthly },
+    { name: bench.msci.name, data: msciMonthly },
+    { name: bench.nasdaq.name, data: nasdaqMonthly }
+  ];
+
+  rowsM.forEach(r => {
+    htmlM += `<tr ${r.isPort ? 'style="border-bottom:2px solid var(--border);font-weight:700"' : ''}>
+      <td>${r.isPort ? '<strong>My Portfolio</strong>' : r.name}</td>`;
+    r.data.forEach(v => {
+      const cls = v > 0 ? 'delta-positive' : v < 0 ? 'delta-negative' : '';
+      htmlM += `<td class="${cls}">${v > 0 ? '+' : ''}${v != null ? v.toFixed(2) + '%' : '—'}</td>`;
+    });
+    htmlM += `</tr>`;
+  });
+  htmlM += `</tbody></table></div>`;
+  const elM = document.getElementById('bm-monthly-table');
+  if (elM) elM.innerHTML = htmlM;
+
+  // Cumulative Simulated Table
+  let htmlC = `<div class="table-wrap"><table><thead><tr><th>Strategy / Index</th>`;
+  monthLabels.forEach(m => htmlC += `<th>${m}</th>`);
+  htmlC += `</tr></thead><tbody>`;
+
+  const rowsC = [
+    { name: 'My Portfolio', data: portCum, isPort: true },
+    { name: bench.sp500.name + ' (100%)', data: spCumSim },
+    { name: bench.msci.name + ' (100%)', data: msciCumSim },
+    { name: bench.nasdaq.name + ' (100%)', data: nasdaqCumSim }
+  ];
+
+  rowsC.forEach(r => {
+    htmlC += `<tr ${r.isPort ? 'style="border-bottom:2px solid var(--border);font-weight:700"' : ''}>
+      <td>${r.isPort ? '<strong>My Portfolio</strong>' : r.name}</td>`;
+    r.data.forEach(v => {
+      htmlC += `<td>${fmt(v)}</td>`;
+    });
+    htmlC += `</tr>`;
+  });
+  htmlC += `</tbody></table></div>`;
+  const elC = document.getElementById('bm-cum-table');
+  if (elC) elC.innerHTML = htmlC;
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function setTableMode(mode, el) {
+  tableMode = mode;
+  document.querySelectorAll('.view-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
+}
+
+function renderTable() {
+  const { months, investments } = DATA;
+  if (!investments.length) {
+    document.getElementById('table-container').innerHTML = '<div class="loading">No data yet. Add an investment!</div>';
+    return;
+  }
+  const isCumulative = tableMode === 'cumulative';
+
+  let html = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>Investment</th><th>Type</th>`;
+  months.forEach((m, mi) => {
+    html += `<th class="month-th">${m}<span class="del-month" title="Delete month" onclick="deleteMonth(${mi})">✕</span></th>`;
+  });
+  html += `<th class="row-total">Total</th><th></th></tr></thead><tbody>`;
+
+  investments.forEach(inv => {
+    const monthly = inv.monthly;
+    const rowTotal = monthly.reduce((a,b)=>a+b,0);
+    html += `<tr>
+      <td>${inv.name}</td>
+      <td><span class="badge badge-${inv.type.toLowerCase()}">${inv.type}</span></td>`;
+    months.forEach((_,mi) => {
+      const val = isCumulative
+        ? monthly.slice(0,mi+1).reduce((a,b)=>a+b,0)
+        : monthly[mi] || 0;
+      html += `<td><input class="cell-input ${val===0?'cell-empty':''}" value="${val===0?'':val.toFixed(2)}"
+        placeholder="0" ${isCumulative?'readonly':''}
+        onblur="updateCell('${inv.name}',${mi},this.value)"
+        onfocus="this.select()"/></td>`;
+    });
+    html += `<td class="row-total">${fmt(rowTotal)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteInvestment('${inv.name}')">✕</button></td>
+    </tr>`;
+  });
+
+  // Totals row
+  html += `</tbody><tfoot><tr><td>TOTAL</td><td></td>`;
+  months.forEach((_,mi) => {
+    const colTotal = isCumulative
+      ? investments.reduce((s,inv)=>s+inv.monthly.slice(0,mi+1).reduce((a,b)=>a+b,0),0)
+      : investments.reduce((s,inv)=>s+(inv.monthly[mi]||0),0);
+    html += `<td class="col-total">${fmt(colTotal)}</td>`;
+  });
+  const grand = investments.reduce((s,inv)=>s+inv.monthly.reduce((a,b)=>a+b,0),0);
+  html += `<td class="row-total">${fmt(grand)}</td><td></td></tr></tfoot></table></div>`;
+  document.getElementById('table-container').innerHTML = html;
+}
+
+function renderGainsTable() {
+  const { months, investments } = DATA;
+  if (!investments.length) {
+    document.getElementById('gains-table').innerHTML = '<div class="loading">No data.</div>';
+    return;
+  }
+  let html = `<div class="table-wrap"><table><thead><tr>
+    <th>Investment</th><th>Type</th>`;
+  months.forEach(m => html += `<th>${m}</th>`);
+  html += `<th>Total</th></tr></thead><tbody>`;
+
+  investments.forEach(inv => {
+    const monthly = inv.monthly;
+    html += `<tr><td>${inv.name}</td>
+      <td><span class="badge badge-${inv.type.toLowerCase()}">${inv.type}</span></td>`;
+    monthly.forEach((v,mi) => {
+      const prev = mi > 0 ? monthly[mi-1] : 0;
+      const delta = v - prev;
+      const cls = delta > 0 ? 'delta-positive' : delta < 0 ? 'delta-negative' : '';
+      html += `<td class="${cls}">${delta > 0 ? '+' : ''}${fmtDelta(delta)}</td>`;
+    });
+    const total = monthly.reduce((a,b)=>a+b,0);
+    html += `<td class="row-total">${fmt(total)}</td></tr>`;
+  });
+
+  // Portfolio MoM row
+  html += `<tr style="border-top:2px solid var(--border)"><td><strong>PORTFOLIO</strong></td><td></td>`;
+  months.forEach((_,mi) => {
+    const cur  = investments.reduce((s,inv)=>s+(inv.monthly[mi]||0),0);
+    const prev = mi>0 ? investments.reduce((s,inv)=>s+(inv.monthly[mi-1]||0),0) : 0;
+    const delta = cur - prev;
+    const cls = delta>0?'delta-positive':delta<0?'delta-negative':'';
+    html += `<td class="${cls}"><strong>${delta>0?'+':''}${fmtDelta(delta)}</strong></td>`;
+  });
+  const grand = investments.reduce((s,inv)=>s+inv.monthly.reduce((a,b)=>a+b,0),0);
+  html += `<td class="row-total"><strong>${fmt(grand)}</strong></td></tr>`;
+
+  html += `</tbody></table></div>`;
+  document.getElementById('gains-table').innerHTML = html;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function updateCell(invName, monthIdx, rawVal) {
+  const val = parseFloat(rawVal) || 0;
+  const res = await fetch('/api/cell', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ investment: invName, month_idx: monthIdx, value: val })
+  });
+  if (res.ok) {
+    await refreshData();
+    toast('Saved ✓', 'ok');
+  } else toast('Save failed', 'err');
+}
+
+async function submitAddMonth() {
+  const label = document.getElementById('input-month').value.trim();
+  if (!label) return;
+  const res = await fetch('/api/add_month', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ label })
+  });
+  const data = await res.json();
+  if (data.ok) { closeModals(); await refreshData(); toast('Month added ✓','ok'); }
+  else toast(data.error, 'err');
+}
+
+async function submitAddInvestment() {
+  const name = document.getElementById('input-inv-name').value.trim();
+  const type = document.getElementById('input-inv-type').value;
+  if (!name) return;
+  const res = await fetch('/api/add_investment', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name, type })
+  });
+  const data = await res.json();
+  if (data.ok) { closeModals(); await refreshData(); toast('Investment added ✓','ok'); }
+  else toast(data.error, 'err');
+}
+
+async function deleteInvestment(name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const res = await fetch('/api/delete_investment', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name })
+  });
+  if ((await res.json()).ok) { await refreshData(); toast('Deleted','ok'); }
+}
+
+async function deleteMonth(idx) {
+  const label = DATA.months[idx];
+  if (!confirm(`Delete month "${label}" and all its data?`)) return;
+  const res = await fetch('/api/delete_month', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ idx })
+  });
+  if ((await res.json()).ok) { await refreshData(); toast('Month deleted','ok'); }
+}
+
+async function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/upload', { method:'POST', body: fd });
+  const data = await res.json();
+  if (data.ok) { closeModals(); await refreshData(); toast('File uploaded ✓','ok'); }
+  else toast(data.error, 'err');
+}
+
+function downloadExcel() {
+  window.location.href = '/api/download';
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function showView(name) {
+  ['overview','table','gains','benchmarks'].forEach(v => {
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.style.display = v===name?'':'none';
+  });
+  document.querySelectorAll('.nav-item').forEach((el,i) => {
+    el.classList.toggle('active', ['overview','table','gains','benchmarks'][i]===name);
+  });
+  if (name==='gains') { renderGainsKPIs(); renderCharts(); renderGainsTable(); }
+  if (name==='benchmarks') { renderBenchmarkCharts(); renderBenchmarkTables(); }
+}
+function openAddMonth()      { document.getElementById('overlay-month').classList.add('open'); }
+function openAddInvestment() { document.getElementById('overlay-investment').classList.add('open'); }
+function openUpload()        { document.getElementById('overlay-upload').classList.add('open'); }
+function closeModals() {
+  document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open'));
+  document.getElementById('input-month').value = '';
+  document.getElementById('input-inv-name').value = '';
+}
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if(e.target===o) closeModals(); }));
+
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+async function refreshData() {
+  const res = await fetch('/api/data');
+  DATA = await res.json();
+  renderAll();
+}
+
+function fmt(v) { return '€' + (v||0).toLocaleString('en-GB', { minimumFractionDigits:0, maximumFractionDigits:0 }); }
+function fmtDelta(v) { return v===0 ? '—' : '€' + Math.abs(v).toLocaleString('en-GB', { minimumFractionDigits:0, maximumFractionDigits:0 }); }
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
